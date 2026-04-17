@@ -1,0 +1,246 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>GIS Database Front End</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            margin: 30px;
+            background: #f8f9fb;
+            color: #222;
+        }
+        h1, h2, h3 {
+            color: #1d3557;
+        }
+        .top-links {
+            margin-bottom: 20px;
+        }
+        .top-links a {
+            display: inline-block;
+            margin-right: 12px;
+            text-decoration: none;
+            color: white;
+            background: #457b9d;
+            padding: 10px 14px;
+            border-radius: 8px;
+        }
+        .summary-boxes {
+            display: flex;
+            gap: 16px;
+            flex-wrap: wrap;
+            margin-bottom: 30px;
+        }
+        .summary-card {
+            background: white;
+            border: 1px solid #d9e2ec;
+            border-radius: 10px;
+            padding: 16px;
+            min-width: 180px;
+            box-shadow: 0 2px 8px rgba(0,0,0,0.05);
+        }
+        .summary-card strong {
+            display: block;
+            font-size: 26px;
+            margin-top: 8px;
+            color: #0b6e4f;
+        }
+        form {
+            margin-bottom: 25px;
+            padding: 15px;
+            border: 1px solid #d9e2ec;
+            border-radius: 10px;
+            background: white;
+            box-shadow: 0 2px 8px rgba(0,0,0,0.04);
+        }
+        input, select, button {
+            margin: 5px;
+            padding: 8px;
+        }
+        button {
+            background: #1d3557;
+            color: white;
+            border: none;
+            border-radius: 6px;
+            cursor: pointer;
+        }
+        table {
+            width: 100%;
+            border-collapse: collapse;
+            margin-bottom: 25px;
+            background: white;
+        }
+        table, th, td {
+            border: 1px solid #cfd8e3;
+        }
+        th {
+            background: #e9f1f7;
+        }
+        th, td {
+            padding: 8px;
+            text-align: left;
+        }
+        .section {
+            margin-bottom: 35px;
+        }
+        .note {
+            background: #fff8e7;
+            border: 1px solid #f0d58c;
+            padding: 12px;
+            border-radius: 8px;
+            margin-bottom: 20px;
+        }
+    </style>
+</head>
+<body>
+    <h1>GIS Database Front End</h1>
+    <p>This home page lets you manage your original <code>places</code> table, add supporting tables, and view imported free GIS data.</p>
+
+    <div class="top-links">
+        <a href="{{ url_for('nearby') }}">Nearby Search</a>
+        <a href="{{ url_for('gis_data') }}">View Imported GIS Data</a>
+    </div>
+
+    <div class="note">
+        <strong>Imported GIS status:</strong><br>
+        OSM Places: {{ osm_count }} |
+        Census Counties: {{ county_count }} |
+        FEMA Risk Counties: {{ risk_count }}<br>
+        After starting Docker, import data with:
+        <code>docker compose exec web python import_osm.py</code>,
+        <code>docker compose exec web python import_census_counties.py</code>,
+        <code>docker compose exec web python import_fema_risk.py</code>
+    </div>
+
+    <div class="summary-boxes">
+        <div class="summary-card">
+            Total Places
+            <strong>{{ places|length }}</strong>
+        </div>
+        <div class="summary-card">
+            Categories
+            <strong>{{ categories|length }}</strong>
+        </div>
+        <div class="summary-card">
+            Notes
+            <strong>{{ notes|length }}</strong>
+        </div>
+        <div class="summary-card">
+            Imported Records
+            <strong>{{ osm_count + county_count + risk_count }}</strong>
+        </div>
+    </div>
+
+    <div class="section">
+        <h2>Add Category</h2>
+        <form method="POST" action="{{ url_for('add_category') }}">
+            <input type="text" name="category_name" placeholder="Category name" required>
+            <button type="submit">Add Category</button>
+        </form>
+    </div>
+
+    <div class="section">
+        <h2>Add Place</h2>
+        <form method="POST" action="{{ url_for('add_place') }}">
+            <input type="text" name="place_name" placeholder="Place name" required>
+            <input type="text" name="category" placeholder="Category" required>
+            <input type="text" name="address" placeholder="Address">
+            <input type="text" name="city" placeholder="City" required>
+            <input type="text" name="state" placeholder="State" required>
+            <input type="number" step="0.000001" name="latitude" placeholder="Latitude" required>
+            <input type="number" step="0.000001" name="longitude" placeholder="Longitude" required>
+            <button type="submit">Add Place</button>
+        </form>
+    </div>
+
+    <div class="section">
+        <h2>Add Note</h2>
+        <form method="POST" action="{{ url_for('add_note') }}">
+            <label for="place_id">Select place:</label>
+            <select id="place_id" name="place_id" required>
+                <option value="">Select place</option>
+                {% for place in places %}
+                    <option value="{{ place[0] }}">{{ place[1] }}</option>
+                {% endfor %}
+            </select>
+            <input type="text" name="note" placeholder="Note" required>
+            <button type="submit">Add Note</button>
+        </form>
+    </div>
+
+    <div class="section">
+        <h2>Places</h2>
+        <table>
+            <thead>
+                <tr>
+                    <th>ID</th>
+                    <th>Name</th>
+                    <th>Category</th>
+                    <th>Address</th>
+                    <th>City</th>
+                    <th>State</th>
+                    <th>Latitude</th>
+                    <th>Longitude</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for place in places %}
+                <tr>
+                    <td>{{ place[0] }}</td>
+                    <td>{{ place[1] }}</td>
+                    <td>{{ place[2] }}</td>
+                    <td>{{ place[3] }}</td>
+                    <td>{{ place[4] }}</td>
+                    <td>{{ place[5] }}</td>
+                    <td>{{ place[6] }}</td>
+                    <td>{{ place[7] }}</td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+
+    <div class="section">
+        <h2>Categories</h2>
+        <table>
+            <thead>
+                <tr>
+                    <th>Category ID</th>
+                    <th>Category Name</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for category in categories %}
+                <tr>
+                    <td>{{ category[0] }}</td>
+                    <td>{{ category[1] }}</td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+
+    <div class="section">
+        <h2>Place Notes</h2>
+        <table>
+            <thead>
+                <tr>
+                    <th>Note ID</th>
+                    <th>Place</th>
+                    <th>Note</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for note in notes %}
+                <tr>
+                    <td>{{ note[0] }}</td>
+                    <td>{{ note[1] }}</td>
+                    <td>{{ note[2] }}</td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+</body>
+</html>

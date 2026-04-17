@@ -1,0 +1,50 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Imported GIS Data</title>
+    <style>
+        body { font-family: Arial, sans-serif; margin: 30px; }
+        table { border-collapse: collapse; width: 100%; margin-bottom: 30px; }
+        th, td { border: 1px solid #bbb; padding: 8px; text-align: left; }
+        h1, h2 { margin-top: 30px; }
+    </style>
+</head>
+<body>
+    <h1>Imported GIS Data</h1>
+    <p><a href="{{ url_for('index') }}">Back to Home</a></p>
+
+    <h2>OSM Places</h2>
+    <table>
+        <tr><th>OSM ID</th><th>Name</th><th>Type</th></tr>
+        {% for r in osm_rows %}
+        <tr><td>{{ r[0] }}</td><td>{{ r[1] }}</td><td>{{ r[2] }}</td></tr>
+        {% endfor %}
+    </table>
+
+    <h2>Census Counties</h2>
+    <table>
+        <tr><th>GEOID</th><th>Name</th></tr>
+        {% for r in county_rows %}
+        <tr><td>{{ r[0] }}</td><td>{{ r[1] }}</td></tr>
+        {% endfor %}
+    </table>
+
+    <h2>FEMA Risk Counties</h2>
+    <table>
+        <tr><th>County GEOID</th><th>County</th><th>State</th><th>Risk Index</th></tr>
+        {% for r in risk_rows %}
+        <tr><td>{{ r[0] }}</td><td>{{ r[1] }}</td><td>{{ r[2] }}</td><td>{{ r[3] }}</td></tr>
+        {% endfor %}
+    </table>
+
+    <h2>Your Places Joined to County + Risk</h2>
+    <table>
+        <tr><th>Place</th><th>County</th><th>Risk Index</th></tr>
+        {% for r in joined_rows %}
+        <tr><td>{{ r[0] }}</td><td>{{ r[1] }}</td><td>{{ r[2] }}</td></tr>
+        {% endfor %}
+    </table>
+</body>
+</html>
