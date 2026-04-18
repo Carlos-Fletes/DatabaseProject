@@ -74,7 +74,8 @@ def index():
     cur.execute("""
         SELECT place_id, place_name, category, address, city, state, latitude, longitude
         FROM places
-        ORDER BY place_id;
+        ORDER BY place_id
+        LIMIT 10;
     """)
     places = cur.fetchall()
 
@@ -93,6 +94,36 @@ def index():
     """)
     notes = cur.fetchall()
 
+    cur.execute("""
+        SELECT city_name, state_abbr, latitude, longitude
+        FROM (
+            SELECT
+                city_name,
+                state_abbr,
+                latitude,
+                longitude,
+                ROW_NUMBER() OVER (
+                    PARTITION BY state_abbr
+                    ORDER BY city_name
+                ) AS rn
+            FROM us_cities
+            WHERE state_abbr IS NOT NULL
+        ) ranked
+        WHERE rn = 1
+        ORDER BY state_abbr
+        LIMIT 10;
+    """)
+    us_cities = cur.fetchall()
+
+    cur.execute("SELECT COUNT(*) FROM osm_places;")
+    osm_count = cur.fetchone()[0]
+
+    cur.execute("SELECT COUNT(*) FROM census_counties;")
+    county_count = cur.fetchone()[0]
+
+    cur.execute("SELECT COUNT(*) FROM fema_risk_counties;")
+    risk_count = cur.fetchone()[0]
+
     cur.close()
     conn.close()
 
@@ -100,7 +131,11 @@ def index():
         "index.html",
         places=places,
         categories=categories,
-        notes=notes
+        notes=notes,
+        osm_count=osm_count,
+        county_count=county_count,
+        risk_count=risk_count,
+        us_cities=us_cities
     )
 
 

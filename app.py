@@ -87,6 +87,18 @@ def init_extra_tables():
     """)
 
     cur.execute("""
+        CREATE TABLE IF NOT EXISTS us_cities (
+            city_id INTEGER GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
+            city_name VARCHAR(150) NOT NULL,
+            state_name VARCHAR(100),
+            state_abbr VARCHAR(10),
+            latitude DECIMAL(9, 6),
+            longitude DECIMAL(9, 6),
+            location GEOGRAPHY(POINT, 4326)
+        );
+    """)
+
+    cur.execute("""
         INSERT INTO categories (category_name)
         SELECT DISTINCT category
         FROM places
@@ -106,7 +118,8 @@ def index():
     cur.execute("""
         SELECT place_id, place_name, category, address, city, state, latitude, longitude
         FROM places
-        ORDER BY place_id;
+        ORDER BY place_id
+        LIMIT 10;
     """)
     places = cur.fetchall()
 
@@ -124,6 +137,27 @@ def index():
         ORDER BY n.note_id;
     """)
     notes = cur.fetchall()
+
+    cur.execute("""
+        SELECT city_name, state_abbr, latitude, longitude
+        FROM (
+            SELECT
+                city_name,
+                state_abbr,
+                latitude,
+                longitude,
+                ROW_NUMBER() OVER (
+                    PARTITION BY state_abbr
+                    ORDER BY city_name
+                ) AS rn
+            FROM us_cities
+            WHERE state_abbr IS NOT NULL
+        ) ranked
+        WHERE rn = 1
+        ORDER BY state_abbr
+        LIMIT 10;
+    """)
+    us_cities = cur.fetchall()
 
     cur.execute("SELECT COUNT(*) FROM osm_places;")
     osm_count = cur.fetchone()[0]
@@ -144,9 +178,9 @@ def index():
         notes=notes,
         osm_count=osm_count,
         county_count=county_count,
-        risk_count=risk_count
+        risk_count=risk_count,
+        us_cities=us_cities
     )
-
 
 @app.route("/add_category", methods=["POST"])
 def add_category():
