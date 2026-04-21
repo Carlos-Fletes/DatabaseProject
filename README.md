@@ -109,3 +109,30 @@ WHERE p1.place_name = 'Griffith Observatory'
   AND ST_DWithin(p1.location, p2.location, 5000)
 ORDER BY distance_meters;
 ```
+
+
+docker compose up --build
+
+http://localhost:5000
+
+Import OpenStreetMap (places / POIs)
+
+docker compose exec web python import_osm.py
+
+Import U.S. Census Counties (boundaries)
+
+docker compose exec web python import_census_counties.py
+
+Import FEMA Risk Data (state-level)
+
+data/NRI_Table_States.csv
+
+docker compose exec web python import_fema_risk.py
+
+Step 4: View GIS Data
+
+http://localhost:5000/gis_data
+
+Stop the app
+
+docker compose down
