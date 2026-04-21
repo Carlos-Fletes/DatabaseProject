@@ -347,4 +347,4 @@ def gis_data():
 if __name__ == "__main__":
     wait_for_db()
     init_extra_tables()
-    app.run(host="0.0.0.0", port=5000, debug=True)
+    app.run(host="0.0.0.0", port=5000, debug= False)
