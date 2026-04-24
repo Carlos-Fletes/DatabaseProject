@@ -1,0 +1,318 @@
+from flask import Flask, render_template, request, redirect, url_for
+import psycopg2
+import os
+import time
+
+app = Flask(__name__)
+
+DB_HOST = os.getenv("DB_HOST", "db")
+DB_NAME = os.getenv("DB_NAME", "gis_database")
+DB_USER = os.getenv("DB_USER", "postgres")
+DB_PASSWORD = os.getenv("DB_PASSWORD", "postgres")
+DB_PORT = os.getenv("DB_PORT", "5432")
+MAPBOX_ACCESS_TOKEN = os.getenv("MAPBOX_ACCESS_TOKEN", "")
+
+
+def get_conn():
+    return psycopg2.connect(
+        host=DB_HOST,
+        database=DB_NAME,
+        user=DB_USER,
+        password=DB_PASSWORD,
+        port=DB_PORT
+    )
+
+
+def wait_for_db():
+    for _ in range(30):
+        try:
+            conn = get_conn()
+            conn.close()
+            print("Database is ready.")
+            return
+        except Exception:
+            print("Waiting for database...")
+            time.sleep(2)
+    raise Exception("Could not connect to the database.")
+
+
+def init_extra_tables():
+    conn = get_conn()
+    cur = conn.cursor()
+
+    cur.execute("""
+        CREATE TABLE IF NOT EXISTS categories (
+            category_id INTEGER GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
+            category_name VARCHAR(100) NOT NULL UNIQUE
+        );
+    """)
+
+    cur.execute("""
+        CREATE TABLE IF NOT EXISTS place_notes (
+            note_id INTEGER GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
+            place_id INTEGER NOT NULL REFERENCES places(place_id) ON DELETE CASCADE,
+            note TEXT NOT NULL
+        );
+    """)
+
+    cur.execute("""
+        INSERT INTO categories (category_name)
+        SELECT DISTINCT category
+        FROM places
+        ON CONFLICT (category_name) DO NOTHING;
+    """)
+
+    conn.commit()
+    cur.close()
+    conn.close()
+
+
+@app.route("/")
+def index():
+    conn = get_conn()
+    cur = conn.cursor()
+
+    cur.execute("""
+        SELECT place_id, place_name, category, address, city, state, latitude, longitude
+        FROM places
+        ORDER BY place_id
+        LIMIT 10;
+    """)
+    places = cur.fetchall()
+
+    cur.execute("""
+        SELECT category_id, category_name
+        FROM categories
+        ORDER BY category_name;
+    """)
+    categories = cur.fetchall()
+
+    cur.execute("""
+        SELECT n.note_id, p.place_name, n.note
+        FROM place_notes n
+        JOIN places p ON n.place_id = p.place_id
+        ORDER BY n.note_id;
+    """)
+    notes = cur.fetchall()
+
+    cur.execute("""
+        SELECT city_name, state_abbr, latitude, longitude
+        FROM (
+            SELECT
+                city_name,
+                state_abbr,
+                latitude,
+                longitude,
+                ROW_NUMBER() OVER (
+                    PARTITION BY state_abbr
+                    ORDER BY city_name
+                ) AS rn
+            FROM us_cities
+            WHERE state_abbr IS NOT NULL
+        ) ranked
+        WHERE rn = 1
+        ORDER BY state_abbr
+        LIMIT 10;
+    """)
+    us_cities = cur.fetchall()
+
+    cur.execute("SELECT COUNT(*) FROM osm_places;")
+    osm_count = cur.fetchone()[0]
+
+    cur.execute("SELECT COUNT(*) FROM census_counties;")
+    county_count = cur.fetchone()[0]
+
+    cur.execute("SELECT COUNT(*) FROM fema_risk_counties;")
+    risk_count = cur.fetchone()[0]
+
+    cur.close()
+    conn.close()
+
+    return render_template(
+        "index.html",
+        places=places,
+        categories=categories,
+        notes=notes,
+        osm_count=osm_count,
+        county_count=county_count,
+        risk_count=risk_count,
+        us_cities=us_cities
+    )
+
+
+@app.route("/add_category", methods=["POST"])
+def add_category():
+    category_name = request.form["category_name"].strip()
+
+    if category_name:
+        conn = get_conn()
+        cur = conn.cursor()
+        cur.execute("""
+            INSERT INTO categories (category_name)
+            VALUES (%s)
+            ON CONFLICT (category_name) DO NOTHING;
+        """, (category_name,))
+        conn.commit()
+        cur.close()
+        conn.close()
+
+    return redirect(url_for("index"))
+
+
+@app.route("/add_place", methods=["POST"])
+def add_place():
+    place_name = request.form["place_name"].strip()
+    category = request.form["category"].strip()
+    address = request.form["address"].strip()
+    city = request.form["city"].strip()
+    state = request.form["state"].strip()
+    latitude = request.form["latitude"].strip()
+    longitude = request.form["longitude"].strip()
+
+    conn = get_conn()
+    cur = conn.cursor()
+
+    cur.execute("""
+        INSERT INTO categories (category_name)
+        VALUES (%s)
+        ON CONFLICT (category_name) DO NOTHING;
+    """, (category,))
+
+    cur.execute("""
+        INSERT INTO places (
+            place_name,
+            category,
+            address,
+            city,
+            state,
+            latitude,
+            longitude,
+            location
+        )
+        VALUES (
+            %s, %s, %s, %s, %s, %s, %s,
+            ST_SetSRID(ST_MakePoint(%s, %s), 4326)::GEOGRAPHY
+        );
+    """, (
+        place_name,
+        category,
+        address,
+        city,
+        state,
+        latitude,
+        longitude,
+        longitude,
+        latitude
+    ))
+
+    conn.commit()
+    cur.close()
+    conn.close()
+
+    return redirect(url_for("index"))
+
+
+@app.route("/add_note", methods=["POST"])
+def add_note():
+    place_id = request.form["place_id"]
+    note = request.form["note"].strip()
+
+    if note:
+        conn = get_conn()
+        cur = conn.cursor()
+        cur.execute("""
+            INSERT INTO place_notes (place_id, note)
+            VALUES (%s, %s);
+        """, (place_id, note))
+        conn.commit()
+        cur.close()
+        conn.close()
+
+    return redirect(url_for("index"))
+
+
+@app.route("/nearby", methods=["GET", "POST"])
+def nearby():
+    conn = get_conn()
+    cur = conn.cursor()
+
+    cur.execute("""
+        SELECT place_id, place_name, category, city, state, latitude, longitude
+        FROM places
+        ORDER BY place_name;
+    """)
+    place_rows = cur.fetchall()
+    place_options = [
+        {
+            "place_id": row[0],
+            "place_name": row[1],
+            "category": row[2],
+            "city": row[3],
+            "state": row[4],
+            "latitude": float(row[5]),
+            "longitude": float(row[6])
+        }
+        for row in place_rows
+    ]
+    place_lookup = {str(place["place_id"]): place for place in place_options}
+
+    results = []
+    selected_place_id = None
+    selected_distance_km = "5"
+
+    if request.method == "POST":
+        selected_place_id = request.form["place_id"]
+        selected_distance_km = request.form["distance_km"]
+        distance_meters = float(selected_distance_km) * 1000.0
+
+        cur.execute("""
+            SELECT
+                p2.place_id,
+                p2.place_name,
+                p2.category,
+                p2.city,
+                p2.state,
+                p2.latitude,
+                p2.longitude,
+                ROUND((ST_Distance(p1.location, p2.location) / 1000.0)::NUMERIC, 2) AS distance_km
+            FROM places AS p1
+            JOIN places AS p2
+                ON p1.place_id <> p2.place_id
+            WHERE p1.place_id = %s
+              AND ST_DWithin(p1.location, p2.location, %s)
+            ORDER BY distance_km;
+        """, (selected_place_id, distance_meters))
+
+        results = [
+            {
+                "place_id": row[0],
+                "place_name": row[1],
+                "category": row[2],
+                "city": row[3],
+                "state": row[4],
+                "latitude": float(row[5]),
+                "longitude": float(row[6]),
+                "distance_km": float(row[7])
+            }
+            for row in cur.fetchall()
+        ]
+
+    cur.close()
+    conn.close()
+
+    return render_template(
+        "nearby.html",
+        results=results,
+        place_options=place_options,
+        place_points=place_options,
+        selected_place=place_lookup.get(selected_place_id),
+        selected_place_id=selected_place_id,
+        selected_distance_km=selected_distance_km,
+        mapbox_access_token=MAPBOX_ACCESS_TOKEN
+    )
+
+
+if __name__ == "__main__":
+    wait_for_db()
+    init_extra_tables()
+    app.run(host="0.0.0.0", port=5000, debug=True)
