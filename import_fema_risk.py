@@ -39,8 +39,14 @@ def main():
         CREATE TABLE IF NOT EXISTS fema_risk_states (
             state_abbr TEXT PRIMARY KEY,
             state_name TEXT,
-            risk_index NUMERIC
+            risk_index NUMERIC,
+            risk_rating TEXT
         );
+    """)
+
+    cur.execute("""
+        ALTER TABLE fema_risk_states
+        ADD COLUMN IF NOT EXISTS risk_rating TEXT;
     """)
 
     total = 0
@@ -54,20 +60,23 @@ def main():
         for row in reader:
             state_abbr = pick(row, "STATEABBRV", "STATEABBR", "STATE")
             state_name = pick(row, "STATE", "STATENAME")
-            risk_index = pick(row, "RISK_INDEX", "RISK_SCORE", "RISKSCORE")
+            risk_index = pick(row, "RISK_INDEX", "RISK_SCORE", "RISKSCORE", "EAL_SCORE")
+            risk_rating = pick(row, "RISK_RATNG", "RISK_RATING", "EAL_RATNG")
 
             if not state_abbr:
                 continue
+            state_abbr = state_abbr.strip().upper()
 
             cur.execute("""
                 INSERT INTO fema_risk_states (
-                    state_abbr, state_name, risk_index
+                    state_abbr, state_name, risk_index, risk_rating
                 )
-                VALUES (%s, %s, %s)
+                VALUES (%s, %s, %s, %s)
                 ON CONFLICT (state_abbr) DO UPDATE
                 SET state_name = EXCLUDED.state_name,
-                    risk_index = EXCLUDED.risk_index;
-            """, (state_abbr, state_name, risk_index))
+                    risk_index = EXCLUDED.risk_index,
+                    risk_rating = EXCLUDED.risk_rating;
+            """, (state_abbr, state_name, risk_index, risk_rating))
 
             total += 1
 

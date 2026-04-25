@@ -2,6 +2,15 @@ from flask import Flask, render_template, request, redirect, url_for
 import psycopg2
 import os
 import time
+from geo_features import (
+    category_filter_options,
+    county_risk_feature,
+    feature_collection,
+    nearby_row_to_dict,
+    osm_row_to_dict,
+    place_row_to_dict,
+    state_abbr_from_fips,
+)
 
 app = Flask(__name__)
 
@@ -88,6 +97,20 @@ def init_extra_tables():
     """)
 
     cur.execute("""
+        CREATE TABLE IF NOT EXISTS fema_risk_states (
+            state_abbr TEXT PRIMARY KEY,
+            state_name TEXT,
+            risk_index NUMERIC,
+            risk_rating TEXT
+        );
+    """)
+
+    cur.execute("""
+        ALTER TABLE fema_risk_states
+        ADD COLUMN IF NOT EXISTS risk_rating TEXT;
+    """)
+
+    cur.execute("""
         CREATE TABLE IF NOT EXISTS us_cities (
             city_id INTEGER GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
             city_name VARCHAR(150) NOT NULL,
@@ -109,6 +132,57 @@ def init_extra_tables():
     conn.commit()
     cur.close()
     conn.close()
+
+
+def fetch_place_options(cur):
+    cur.execute("""
+        SELECT place_id, place_name, category, city, state, latitude, longitude
+        FROM places
+        ORDER BY place_name;
+    """)
+    return [place_row_to_dict(row) for row in cur.fetchall()]
+
+
+def fetch_osm_points(cur):
+    cur.execute("""
+        SELECT osm_id, COALESCE(name, '(unnamed)'), feature_type, city, state, latitude, longitude
+        FROM osm_places
+        WHERE latitude IS NOT NULL
+          AND longitude IS NOT NULL
+        ORDER BY COALESCE(name, '(unnamed)')
+        LIMIT 1000;
+    """)
+    return [osm_row_to_dict(row) for row in cur.fetchall()]
+
+
+def fetch_risk_areas(cur):
+    cur.execute("""
+        SELECT geoid, name, statefp, ST_AsGeoJSON(geom)
+        FROM census_counties
+        WHERE geom IS NOT NULL
+        ORDER BY geoid
+        LIMIT 500;
+    """)
+    county_rows = cur.fetchall()
+
+    cur.execute("""
+        SELECT state_abbr, state_name, risk_index, risk_rating
+        FROM fema_risk_states;
+    """)
+    risk_by_state = {
+        row[0]: {
+            "state_name": row[1],
+            "risk_index": row[2],
+            "risk_rating": row[3],
+        }
+        for row in cur.fetchall()
+    }
+
+    features = [
+        county_risk_feature(row, risk_by_state.get(state_abbr_from_fips(row[2])))
+        for row in county_rows
+    ]
+    return feature_collection(features)
 
 
 @app.route("/")
@@ -166,7 +240,7 @@ def index():
     cur.execute("SELECT COUNT(*) FROM census_counties;")
     county_count = cur.fetchone()[0]
 
-    cur.execute("SELECT COUNT(*) FROM fema_risk_counties;")
+    cur.execute("SELECT COUNT(*) FROM fema_risk_states;")
     risk_count = cur.fetchone()[0]
 
     cur.close()
@@ -279,24 +353,7 @@ def nearby():
     conn = get_conn()
     cur = conn.cursor()
 
-    cur.execute("""
-        SELECT place_id, place_name, category, city, state, latitude, longitude
-        FROM places
-        ORDER BY place_name;
-    """)
-    place_rows = cur.fetchall()
-    place_options = [
-        {
-            "place_id": row[0],
-            "place_name": row[1],
-            "category": row[2],
-            "city": row[3],
-            "state": row[4],
-            "latitude": float(row[5]),
-            "longitude": float(row[6])
-        }
-        for row in place_rows
-    ]
+    place_options = fetch_place_options(cur)
     place_lookup = {str(place["place_id"]): place for place in place_options}
 
     results = []
@@ -326,19 +383,11 @@ def nearby():
             ORDER BY distance_km;
         """, (selected_place_id, distance_meters))
 
-        results = [
-            {
-                "place_id": row[0],
-                "place_name": row[1],
-                "category": row[2],
-                "city": row[3],
-                "state": row[4],
-                "latitude": float(row[5]),
-                "longitude": float(row[6]),
-                "distance_km": float(row[7])
-            }
-            for row in cur.fetchall()
-        ]
+        results = [nearby_row_to_dict(row) for row in cur.fetchall()]
+
+    osm_points = fetch_osm_points(cur)
+    map_points = place_options + osm_points
+    risk_areas = fetch_risk_areas(cur)
 
     cur.close()
     conn.close()
@@ -348,6 +397,9 @@ def nearby():
         results=results,
         place_options=place_options,
         place_points=place_options,
+        map_points=map_points,
+        filter_options=category_filter_options(map_points),
+        risk_areas=risk_areas,
         selected_place=place_lookup.get(selected_place_id),
         selected_place_id=selected_place_id,
         selected_distance_km=selected_distance_km,
@@ -377,26 +429,42 @@ def gis_data():
     county_rows = cur.fetchall()
 
     cur.execute("""
-        SELECT county_geoid, county_name, state_abbr, risk_index
-        FROM fema_risk_counties
-        ORDER BY risk_index DESC NULLS LAST
-        LIMIT 20;
+        SELECT state_abbr, state_name, risk_index, risk_rating
+        FROM fema_risk_states
+        ORDER BY risk_index DESC NULLS LAST;
     """)
-    risk_rows = cur.fetchall()
+    all_risk_rows = cur.fetchall()
+    risk_rows = all_risk_rows[:20]
+    risk_by_state = {
+        row[0]: {
+            "state_name": row[1],
+            "risk_index": row[2],
+            "risk_rating": row[3],
+        }
+        for row in all_risk_rows
+    }
 
     cur.execute("""
         SELECT
             p.place_name,
             c.name AS county_name,
-            f.risk_index
+            c.statefp
         FROM places p
         LEFT JOIN census_counties c
           ON ST_Intersects(p.location::geometry, c.geom)
-        LEFT JOIN fema_risk_counties f
-          ON c.geoid = f.county_geoid
         ORDER BY p.place_name;
     """)
-    joined_rows = cur.fetchall()
+    joined_rows = []
+    for place_name, county_name, statefp in cur.fetchall():
+        state_abbr = state_abbr_from_fips(statefp)
+        state_risk = risk_by_state.get(state_abbr, {})
+        joined_rows.append((
+            place_name,
+            county_name,
+            state_abbr,
+            state_risk.get("risk_index"),
+            state_risk.get("risk_rating"),
+        ))
 
     cur.close()
     conn.close()
