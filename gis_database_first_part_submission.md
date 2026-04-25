@@ -13,8 +13,9 @@ This first part of the project sets up a PostgreSQL database with PostGIS suppor
 5. Used `GEOGRAPHY(POINT, 4326)` for the `location` column so distances can be measured in meters on Earth-based coordinates.
 6. Inserted five realistic U.S. locations using `ST_SetSRID(ST_MakePoint(longitude, latitude), 4326)::GEOGRAPHY`.
 7. Added a query to list all saved records.
-8. Added an example `ST_Distance` query to calculate the distance between two places.
-9. Added an example `ST_DWithin` query to find nearby places within `5000` meters.
+8. Added an example `ST_Distance` query to calculate the distance between two places in kilometers.
+9. Added an example `ST_DWithin` query to find nearby places within `5` kilometers.
+10. Added an optional GeoJSON export query for the map viewer.
 
 ## SQL Code
 
@@ -118,30 +119,52 @@ SELECT
 FROM places
 ORDER BY place_id;
 
--- 6. Distance example using ST_Distance.
+-- 6. Distance example using ST_Distance in kilometers.
 SELECT
     p1.place_name AS from_place,
     p2.place_name AS to_place,
-    ROUND(ST_Distance(p1.location, p2.location)) AS distance_meters
+    ROUND((ST_Distance(p1.location, p2.location) / 1000.0)::NUMERIC, 2) AS distance_km
 FROM places AS p1
 CROSS JOIN places AS p2
 WHERE p1.place_name = 'Statue of Liberty'
   AND p2.place_name = 'Willis Tower';
 
--- 7. Nearby search example using ST_DWithin.
+-- 7. Nearby search example using ST_DWithin for 5 km.
 SELECT
     p2.place_id,
     p2.place_name,
     p2.category,
     p2.city,
     p2.state,
-    ROUND(ST_Distance(p1.location, p2.location)) AS distance_meters
+    ROUND((ST_Distance(p1.location, p2.location) / 1000.0)::NUMERIC, 2) AS distance_km
 FROM places AS p1
 JOIN places AS p2
     ON p1.place_id <> p2.place_id
 WHERE p1.place_name = 'Griffith Observatory'
   AND ST_DWithin(p1.location, p2.location, 5000)
-ORDER BY distance_meters;
+ORDER BY distance_km;
+
+-- 8. Optional GeoJSON export for the web map.
+SELECT json_build_object(
+    'type', 'FeatureCollection',
+    'features', json_agg(
+        json_build_object(
+            'type', 'Feature',
+            'geometry', ST_AsGeoJSON(location::GEOMETRY)::JSON,
+            'properties', json_build_object(
+                'place_id', place_id,
+                'place_name', place_name,
+                'category', category,
+                'address', address,
+                'city', city,
+                'state', state,
+                'latitude', latitude,
+                'longitude', longitude
+            )
+        )
+    )
+) AS places_geojson
+FROM places;
 ```
 
 ## Table Diagram
@@ -165,5 +188,5 @@ ORDER BY distance_meters;
 ## Notes
 
 - `longitude` must come before `latitude` in `ST_MakePoint`.
-- `ST_Distance` returns the distance between two geography points in meters.
-- `ST_DWithin` checks whether two places are within a specified distance in meters.
+- `ST_Distance` returns meters for `GEOGRAPHY`, so the query divides by `1000` to display kilometers.
+- `ST_DWithin` still expects the search radius in meters, so `5000` means `5` kilometers.

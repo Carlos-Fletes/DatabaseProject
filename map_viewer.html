@@ -1,0 +1,93 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>GIS 3D Map Viewer</title>
+    <link rel="preconnect" href="https://api.mapbox.com">
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500&family=IBM+Plex+Sans:wght@400;500;600;700&display=swap" rel="stylesheet">
+    <link href="https://api.mapbox.com/mapbox-gl-js/v3.12.0/mapbox-gl.css" rel="stylesheet">
+    <link rel="stylesheet" href="./map_viewer.css">
+</head>
+<body>
+    <aside class="sidebar">
+        <p class="eyebrow">GIS Database Project</p>
+        <h1>3D Satellite Map</h1>
+        <p class="lead">
+            This viewer plots every place in the database, shows exact latitude and longitude,
+            measures direct distance in kilometers, and highlights nearby places using a km radius.
+        </p>
+
+        <section class="panel">
+            <h2>Distance Between Two Places</h2>
+            <div class="stack">
+                <label>
+                    From
+                    <select id="from-select"></select>
+                </label>
+                <label>
+                    To
+                    <select id="to-select"></select>
+                </label>
+                <div class="metric">
+                    <small>Direct distance</small>
+                    <strong id="distance-value">--</strong>
+                    <span id="distance-meta" class="hint">Choose two places to measure direct distance in kilometers.</span>
+                </div>
+                <button id="reset-distance" type="button">Reset Distance Selection</button>
+            </div>
+        </section>
+
+        <section class="panel">
+            <h2>Nearby Search In KM</h2>
+            <div class="stack">
+                <label>
+                    Center place
+                    <select id="nearby-origin"></select>
+                </label>
+                <label>
+                    Radius
+                    <input id="nearby-radius" type="range" min="1" max="3000" step="1" value="5">
+                </label>
+                <div class="metric">
+                    <small>Current radius</small>
+                    <strong id="nearby-radius-value">5 km</strong>
+                    <span class="hint">This matches the nearby-distance display in kilometers.</span>
+                </div>
+                <button id="focus-nearby" type="button">Focus Nearby Center</button>
+                <div id="nearby-results" class="results"></div>
+            </div>
+        </section>
+
+        <section id="active-place" class="panel"></section>
+
+        <section class="panel">
+            <h2>All Places In Database</h2>
+            <p class="note">
+                Use any place card to fill the distance and nearby selectors. Popups on the map show
+                the exact coordinate values stored for each record.
+            </p>
+            <div id="places-list" class="places-list"></div>
+        </section>
+    </aside>
+
+    <main class="map-shell">
+        <div class="map-overlay">
+            <h2>Map Status</h2>
+            <p id="map-status" class="status-warn">Loading map resources...</p>
+            <p class="note">
+                `map_config.js` needs a valid Mapbox access token for satellite imagery, 3D terrain,
+                and building extrusion layers.
+            </p>
+        </div>
+        <div id="map"></div>
+    </main>
+
+    <script src="https://api.mapbox.com/mapbox-gl-js/v3.12.0/mapbox-gl.js"></script>
+    <script src="./map_config.js"></script>
+    <script src="./places_data.js"></script>
+    <script src="./map_viewer.js"></script>
+</body>
+</html>

@@ -10,6 +10,7 @@ DB_NAME = os.getenv("DB_NAME", "gis_database")
 DB_USER = os.getenv("DB_USER", "postgres")
 DB_PASSWORD = os.getenv("DB_PASSWORD", "postgres")
 DB_PORT = os.getenv("DB_PORT", "5432")
+MAPBOX_ACCESS_TOKEN = os.getenv("MAPBOX_ACCESS_TOKEN", "")
 
 
 def get_conn():
@@ -279,19 +280,33 @@ def nearby():
     cur = conn.cursor()
 
     cur.execute("""
-        SELECT place_id, place_name
+        SELECT place_id, place_name, category, city, state, latitude, longitude
         FROM places
         ORDER BY place_name;
     """)
-    place_options = cur.fetchall()
+    place_rows = cur.fetchall()
+    place_options = [
+        {
+            "place_id": row[0],
+            "place_name": row[1],
+            "category": row[2],
+            "city": row[3],
+            "state": row[4],
+            "latitude": float(row[5]),
+            "longitude": float(row[6])
+        }
+        for row in place_rows
+    ]
+    place_lookup = {str(place["place_id"]): place for place in place_options}
 
     results = []
     selected_place_id = None
-    selected_distance = None
+    selected_distance_km = "5"
 
     if request.method == "POST":
         selected_place_id = request.form["place_id"]
-        selected_distance = request.form["distance"]
+        selected_distance_km = request.form["distance_km"]
+        distance_meters = float(selected_distance_km) * 1000.0
 
         cur.execute("""
             SELECT
@@ -300,16 +315,30 @@ def nearby():
                 p2.category,
                 p2.city,
                 p2.state,
-                ROUND(ST_Distance(p1.location, p2.location)) AS distance_meters
+                p2.latitude,
+                p2.longitude,
+                ROUND((ST_Distance(p1.location, p2.location) / 1000.0)::NUMERIC, 2) AS distance_km
             FROM places AS p1
             JOIN places AS p2
                 ON p1.place_id <> p2.place_id
             WHERE p1.place_id = %s
               AND ST_DWithin(p1.location, p2.location, %s)
-            ORDER BY distance_meters;
-        """, (selected_place_id, selected_distance))
+            ORDER BY distance_km;
+        """, (selected_place_id, distance_meters))
 
-        results = cur.fetchall()
+        results = [
+            {
+                "place_id": row[0],
+                "place_name": row[1],
+                "category": row[2],
+                "city": row[3],
+                "state": row[4],
+                "latitude": float(row[5]),
+                "longitude": float(row[6]),
+                "distance_km": float(row[7])
+            }
+            for row in cur.fetchall()
+        ]
 
     cur.close()
     conn.close()
@@ -318,8 +347,11 @@ def nearby():
         "nearby.html",
         results=results,
         place_options=place_options,
+        place_points=place_options,
+        selected_place=place_lookup.get(selected_place_id),
         selected_place_id=selected_place_id,
-        selected_distance=selected_distance
+        selected_distance_km=selected_distance_km,
+        mapbox_access_token=MAPBOX_ACCESS_TOKEN
     )
 
 

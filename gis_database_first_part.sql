@@ -104,29 +104,52 @@ SELECT
 FROM places
 ORDER BY place_id;
 
--- 6. Calculate the distance between two places.
+-- 6. Calculate the distance between two places in kilometers.
 -- This example measures the distance between the Statue of Liberty and Willis Tower.
 SELECT
     p1.place_name AS from_place,
     p2.place_name AS to_place,
-    ROUND(ST_Distance(p1.location, p2.location)) AS distance_meters
+    ROUND((ST_Distance(p1.location, p2.location) / 1000.0)::NUMERIC, 2) AS distance_km
 FROM places AS p1
 CROSS JOIN places AS p2
 WHERE p1.place_name = 'Statue of Liberty'
   AND p2.place_name = 'Willis Tower';
 
--- 7. Find all places within 5000 meters of a reference place.
--- This example searches for places within 5 km of Griffith Observatory.
+-- 7. Find all places within 5 kilometers of a reference place.
+-- ST_DWithin still uses meters for GEOGRAPHY, so 5000 means 5 km.
 SELECT
     p2.place_id,
     p2.place_name,
     p2.category,
     p2.city,
     p2.state,
-    ROUND(ST_Distance(p1.location, p2.location)) AS distance_meters
+    ROUND((ST_Distance(p1.location, p2.location) / 1000.0)::NUMERIC, 2) AS distance_km
 FROM places AS p1
 JOIN places AS p2
     ON p1.place_id <> p2.place_id
 WHERE p1.place_name = 'Griffith Observatory'
   AND ST_DWithin(p1.location, p2.location, 5000)
-ORDER BY distance_meters;
+ORDER BY distance_km;
+
+-- 8. Optional export query for a web map.
+-- This returns the places table as a GeoJSON FeatureCollection.
+SELECT json_build_object(
+    'type', 'FeatureCollection',
+    'features', json_agg(
+        json_build_object(
+            'type', 'Feature',
+            'geometry', ST_AsGeoJSON(location::GEOMETRY)::JSON,
+            'properties', json_build_object(
+                'place_id', place_id,
+                'place_name', place_name,
+                'category', category,
+                'address', address,
+                'city', city,
+                'state', state,
+                'latitude', latitude,
+                'longitude', longitude
+            )
+        )
+    )
+) AS places_geojson
+FROM places;

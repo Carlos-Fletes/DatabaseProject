@@ -11,6 +11,13 @@ This Flask app uses your existing `gis_database` project and pulls data from the
 
 The app reads from `places`, lets you add more records, lets you add notes, and runs a PostGIS nearby search.
 
+The nearby page on the `map` branch also:
+- accepts distance input in kilometers
+- converts km to meters before calling `ST_DWithin`
+- displays result distances in kilometers
+- shows a 3D satellite map when `MAPBOX_ACCESS_TOKEN` is configured
+- displays exact coordinates for each point
+
 ## Run steps
 
 1. Run your original SQL first.
@@ -40,6 +47,12 @@ export PGPASSWORD=your_password
 
 ```bash
 python app.py
+```
+
+If you want the 3D satellite map, also export:
+
+```bash
+export MAPBOX_ACCESS_TOKEN=your_mapbox_token_here
 ```
 
 6. Open in browser:

@@ -3,82 +3,344 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Nearby Search</title>
+    <title>Nearby Search and 3D Map</title>
+    <link rel="preconnect" href="https://api.mapbox.com">
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500&family=IBM+Plex+Sans:wght@400;500;600;700&display=swap" rel="stylesheet">
+    <link href="https://api.mapbox.com/mapbox-gl-js/v3.12.0/mapbox-gl.css" rel="stylesheet">
     <style>
-        body {
-            font-family: Arial, sans-serif;
-            margin: 30px;
+        :root {
+            --bg: #07111a;
+            --panel: rgba(7, 17, 26, 0.9);
+            --panel-strong: rgba(10, 23, 35, 0.96);
+            --border: rgba(255, 255, 255, 0.12);
+            --text: #ecf3f6;
+            --muted: #9eb3bf;
+            --accent: #3ddc97;
+            --accent-2: #ffb703;
+            --danger: #ff6b6b;
+            --shadow: 0 18px 60px rgba(0, 0, 0, 0.35);
         }
-        form {
-            margin-bottom: 25px;
-            padding: 15px;
-            border: 1px solid #ccc;
-            border-radius: 8px;
+        * { box-sizing: border-box; }
+        html, body {
+            margin: 0;
+            min-height: 100%;
+            background: radial-gradient(circle at top, #123149 0%, #07111a 50%, #02070b 100%);
+            color: var(--text);
+            font-family: "IBM Plex Sans", "Segoe UI", sans-serif;
         }
-        input, select, button {
-            margin: 5px;
-            padding: 8px;
+        body { display: grid; grid-template-columns: 390px 1fr; }
+        .sidebar {
+            padding: 24px 18px;
+            background: linear-gradient(180deg, rgba(5, 14, 22, 0.95) 0%, rgba(8, 19, 30, 0.88) 100%);
+            border-right: 1px solid var(--border);
+            overflow-y: auto;
         }
-        table {
+        .map-shell { position: relative; min-height: 100vh; }
+        #map { width: 100%; height: 100vh; }
+        .eyebrow {
+            margin: 0 0 8px;
+            color: var(--accent);
+            font-size: 0.8rem;
+            letter-spacing: 0.14em;
+            text-transform: uppercase;
+        }
+        h1 { margin: 0 0 10px; font-size: 2rem; line-height: 1.05; }
+        h2 { margin: 0 0 12px; font-size: 1rem; }
+        .lead, .hint, .note { color: var(--muted); line-height: 1.5; }
+        .lead { margin: 0 0 18px; }
+        .nav-links { display: flex; gap: 12px; flex-wrap: wrap; margin-bottom: 18px; }
+        .nav-links a { color: var(--text); text-decoration: none; border-bottom: 1px solid rgba(255,255,255,0.3); }
+        .panel {
+            margin-top: 16px;
+            padding: 16px;
+            background: var(--panel);
+            border: 1px solid var(--border);
+            border-radius: 18px;
+            box-shadow: var(--shadow);
+        }
+        .stack { display: grid; gap: 10px; }
+        label { display: grid; gap: 6px; font-size: 0.9rem; color: var(--muted); }
+        select, input, button {
             width: 100%;
-            border-collapse: collapse;
+            border: 1px solid var(--border);
+            border-radius: 12px;
+            padding: 11px 12px;
+            background: rgba(255, 255, 255, 0.06);
+            color: var(--text);
+            font: inherit;
         }
-        table, th, td {
-            border: 1px solid #bbb;
+        button {
+            cursor: pointer;
+            background: linear-gradient(135deg, rgba(61, 220, 151, 0.24), rgba(61, 220, 151, 0.1));
+            border-color: rgba(61, 220, 151, 0.35);
         }
-        th, td {
-            padding: 8px;
-            text-align: left;
+        .metric {
+            display: grid;
+            gap: 6px;
+            padding: 12px;
+            border-radius: 14px;
+            background: rgba(255, 255, 255, 0.05);
         }
-        a {
-            text-decoration: none;
+        .metric strong { font-size: 1.4rem; }
+        .results { display: grid; gap: 10px; }
+        .result-card {
+            padding: 12px;
+            border: 1px solid var(--border);
+            border-radius: 14px;
+            background: rgba(255, 255, 255, 0.04);
+        }
+        .result-card strong { display: block; margin-bottom: 4px; }
+        .map-overlay {
+            position: absolute;
+            top: 22px;
+            right: 22px;
+            z-index: 2;
+            width: min(340px, calc(100% - 44px));
+            padding: 16px;
+            border: 1px solid var(--border);
+            border-radius: 18px;
+            background: var(--panel-strong);
+            box-shadow: var(--shadow);
+        }
+        .map-status-ok { color: var(--accent); }
+        .map-status-warn { color: var(--accent-2); }
+        table { width: 100%; border-collapse: collapse; margin-top: 12px; font-size: 0.95rem; }
+        th, td { border: 1px solid var(--border); padding: 8px; text-align: left; vertical-align: top; }
+        code { font-family: "IBM Plex Mono", monospace; }
+        @media (max-width: 960px) {
+            body { grid-template-columns: 1fr; grid-template-rows: auto 60vh; }
+            .sidebar { max-height: 42vh; border-right: 0; border-bottom: 1px solid var(--border); }
+            #map { height: 60vh; }
+            .map-overlay { top: 12px; right: 12px; left: 12px; width: auto; }
         }
     </style>
 </head>
 <body>
-    <h1>Nearby Place Search</h1>
+    <aside class="sidebar">
+        <p class="eyebrow">GIS Database App</p>
+        <h1>Nearby Search + 3D Map</h1>
+        <p class="lead">Search nearby places in kilometers, inspect exact coordinates for every record, and compare direct point-to-point distance on a 3D satellite map.</p>
+        <div class="nav-links">
+            <a href="{{ url_for('index') }}">Back to Home</a>
+            <a href="{{ url_for('gis_data') }}">Imported GIS Data</a>
+        </div>
 
-    <p><a href="{{ url_for('index') }}">Back to Home</a></p>
+        <section class="panel">
+            <h2>Nearby Search In KM</h2>
+            <form method="POST" action="{{ url_for('nearby') }}" class="stack">
+                <label>
+                    Center place
+                    <select id="place_id" name="place_id" required>
+                        <option value="">Select place</option>
+                        {% for place in place_options %}
+                            <option value="{{ place.place_id }}" {% if selected_place_id == place.place_id|string %}selected{% endif %}>
+                                {{ place.place_name }} ({{ place.city }}, {{ place.state }})
+                            </option>
+                        {% endfor %}
+                    </select>
+                </label>
+                <label>
+                    Search radius in kilometers
+                    <input type="number" id="distance_km" name="distance_km" min="0.1" step="0.1" value="{{ selected_distance_km }}" required>
+                </label>
+                <button type="submit">Run Nearby Search</button>
+            </form>
+        </section>
 
-    <form method="POST" action="{{ url_for('nearby') }}">
-        <label for="place_id">Select place:</label>
-        <select id="place_id" name="place_id" required>
-            <option value="">Select place</option>
-            {% for place in place_options %}
-                <option value="{{ place[0] }}" {% if selected_place_id == place[0]|string %}selected{% endif %}>
-                    {{ place[1] }}
-                </option>
-            {% endfor %}
-        </select>
+        <section class="panel">
+            <h2>Direct Distance</h2>
+            <div class="stack">
+                <label>From<select id="from-select"></select></label>
+                <label>To<select id="to-select"></select></label>
+                <div class="metric">
+                    <small class="hint">Point-to-point distance</small>
+                    <strong id="distance-value">--</strong>
+                    <span id="distance-meta" class="hint">Choose two places to compare distance in kilometers.</span>
+                </div>
+                <button type="button" id="reset-distance">Reset Distance Selection</button>
+            </div>
+        </section>
 
-        <input type="number" name="distance" placeholder="Distance in meters" value="{{ selected_distance or '' }}" required>
-        <button type="submit">Search</button>
-    </form>
+        <section class="panel" id="active-place-panel">
+            <h2>Active Place</h2>
+            {% if selected_place %}
+                <p><strong>{{ selected_place.place_name }}</strong></p>
+                <p>{{ selected_place.category }} in {{ selected_place.city }}, {{ selected_place.state }}</p>
+                <p>Latitude: <code>{{ "%.6f"|format(selected_place.latitude) }}</code></p>
+                <p>Longitude: <code>{{ "%.6f"|format(selected_place.longitude) }}</code></p>
+            {% else %}
+                <p class="note">Click any map point to inspect exact coordinates.</p>
+            {% endif %}
+        </section>
 
-    <h2>Results</h2>
-    <table>
-        <thead>
-            <tr>
-                <th>Place ID</th>
-                <th>Name</th>
-                <th>Category</th>
-                <th>City</th>
-                <th>State</th>
-                <th>Distance (meters)</th>
-            </tr>
-        </thead>
-        <tbody>
-            {% for row in results %}
-            <tr>
-                <td>{{ row[0] }}</td>
-                <td>{{ row[1] }}</td>
-                <td>{{ row[2] }}</td>
-                <td>{{ row[3] }}</td>
-                <td>{{ row[4] }}</td>
-                <td>{{ row[5] }}</td>
-            </tr>
-            {% endfor %}
-        </tbody>
-    </table>
+        <section class="panel">
+            <h2>Nearby Results</h2>
+            <div class="results">
+                {% if results %}
+                    {% for row in results %}
+                        <div class="result-card">
+                            <strong>{{ row.place_name }}</strong>
+                            <div>{{ row.category }} in {{ row.city }}, {{ row.state }}</div>
+                            <div class="hint">{{ "%.2f"|format(row.distance_km) }} km away</div>
+                            <div class="hint">Lat {{ "%.6f"|format(row.latitude) }} | Lng {{ "%.6f"|format(row.longitude) }}</div>
+                        </div>
+                    {% endfor %}
+                {% else %}
+                    <div class="result-card">Run a search to list nearby places in kilometers.</div>
+                {% endif %}
+            </div>
+            <table>
+                <thead>
+                    <tr>
+                        <th>Place</th>
+                        <th>Category</th>
+                        <th>City</th>
+                        <th>State</th>
+                        <th>Distance (km)</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for row in results %}
+                        <tr>
+                            <td>{{ row.place_name }}</td>
+                            <td>{{ row.category }}</td>
+                            <td>{{ row.city }}</td>
+                            <td>{{ row.state }}</td>
+                            <td>{{ "%.2f"|format(row.distance_km) }}</td>
+                        </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </section>
+    </aside>
+
+    <main class="map-shell">
+        <div class="map-overlay">
+            <h2>Map Status</h2>
+            <p id="map-status" class="{% if mapbox_access_token %}map-status-ok{% else %}map-status-warn{% endif %}">
+                {% if mapbox_access_token %}Loading 3D satellite map...{% else %}Set MAPBOX_ACCESS_TOKEN to enable the 3D satellite map.{% endif %}
+            </p>
+            <p class="note">The map uses your live `places` table data. Popups show the exact latitude and longitude stored in PostgreSQL.</p>
+        </div>
+        <div id="map"></div>
+    </main>
+
+    <script src="https://api.mapbox.com/mapbox-gl-js/v3.12.0/mapbox-gl.js"></script>
+    <script>
+        const places = {{ place_points|tojson }};
+        const selectedPlaceId = {{ (selected_place_id or none)|tojson }};
+        const mapboxToken = {{ mapbox_access_token|tojson }};
+        const fromSelect = document.getElementById("from-select");
+        const toSelect = document.getElementById("to-select");
+        const distanceValue = document.getElementById("distance-value");
+        const distanceMeta = document.getElementById("distance-meta");
+        const activePlacePanel = document.getElementById("active-place-panel");
+        const mapStatus = document.getElementById("map-status");
+        const resetDistance = document.getElementById("reset-distance");
+        const placeById = new Map(places.map((place) => [String(place.place_id), place]));
+        let map = null;
+
+        function formatCoordinate(value) { return Number(value).toFixed(6); }
+        function formatKilometers(value) { return `${value.toFixed(2)} km`; }
+        function haversineKm(fromPlace, toPlace) {
+            const toRadians = (degrees) => degrees * (Math.PI / 180);
+            const dLat = toRadians(toPlace.latitude - fromPlace.latitude);
+            const dLng = toRadians(toPlace.longitude - fromPlace.longitude);
+            const a = Math.sin(dLat / 2) ** 2 + Math.cos(toRadians(fromPlace.latitude)) * Math.cos(toRadians(toPlace.latitude)) * Math.sin(dLng / 2) ** 2;
+            return 6371 * (2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a)));
+        }
+        function populateDistanceSelectors() {
+            const options = places.map((place) => `<option value="${place.place_id}">${place.place_name} (${place.city}, ${place.state})</option>`).join("");
+            fromSelect.innerHTML = `<option value="">Select start point</option>${options}`;
+            toSelect.innerHTML = `<option value="">Select end point</option>${options}`;
+            if (selectedPlaceId && placeById.has(String(selectedPlaceId))) {
+                fromSelect.value = String(selectedPlaceId);
+            } else if (places[0]) {
+                fromSelect.value = String(places[0].place_id);
+            }
+            if (places[1]) {
+                toSelect.value = String(places[1].place_id);
+            }
+        }
+        function updateActivePlace(place) {
+            activePlacePanel.innerHTML = `<h2>Active Place</h2><p><strong>${place.place_name}</strong></p><p>${place.category} in ${place.city}, ${place.state}</p><p>Latitude: <code>${formatCoordinate(place.latitude)}</code></p><p>Longitude: <code>${formatCoordinate(place.longitude)}</code></p>`;
+        }
+        function updateDistanceDisplay() {
+            const fromPlace = placeById.get(fromSelect.value);
+            const toPlace = placeById.get(toSelect.value);
+            if (!fromPlace || !toPlace) {
+                distanceValue.textContent = "--";
+                distanceMeta.textContent = "Choose two places to compare distance in kilometers.";
+                if (map && map.getSource("route-line")) {
+                    map.getSource("route-line").setData({ type: "FeatureCollection", features: [] });
+                }
+                return;
+            }
+            distanceValue.textContent = formatKilometers(haversineKm(fromPlace, toPlace));
+            distanceMeta.textContent = `${fromPlace.place_name} to ${toPlace.place_name}`;
+            if (map && map.getSource("route-line")) {
+                map.getSource("route-line").setData({
+                    type: "FeatureCollection",
+                    features: [{ type: "Feature", geometry: { type: "LineString", coordinates: [[fromPlace.longitude, fromPlace.latitude], [toPlace.longitude, toPlace.latitude]] }, properties: {} }]
+                });
+                const bounds = new mapboxgl.LngLatBounds();
+                bounds.extend([fromPlace.longitude, fromPlace.latitude]);
+                bounds.extend([toPlace.longitude, toPlace.latitude]);
+                map.fitBounds(bounds, { padding: 100, pitch: 55, bearing: 15 });
+            }
+        }
+        function initMap() {
+            if (!mapboxToken) { return; }
+            mapboxgl.accessToken = mapboxToken;
+            map = new mapboxgl.Map({
+                container: "map",
+                style: "mapbox://styles/mapbox/satellite-streets-v12",
+                center: [-98.5795, 39.8283],
+                zoom: 3.4,
+                pitch: 55,
+                bearing: -10,
+                antialias: true
+            });
+            map.addControl(new mapboxgl.NavigationControl(), "top-left");
+            map.addControl(new mapboxgl.ScaleControl({ unit: "metric" }), "bottom-left");
+            map.on("load", () => {
+                map.addSource("mapbox-dem", { type: "raster-dem", url: "mapbox://mapbox.mapbox-terrain-dem-v1", tileSize: 512, maxzoom: 14 });
+                map.setTerrain({ source: "mapbox-dem", exaggeration: 1.25 });
+                map.addSource("places", {
+                    type: "geojson",
+                    data: {
+                        type: "FeatureCollection",
+                        features: places.map((place) => ({ type: "Feature", geometry: { type: "Point", coordinates: [place.longitude, place.latitude] }, properties: place }))
+                    }
+                });
+                map.addSource("route-line", { type: "geojson", data: { type: "FeatureCollection", features: [] } });
+                map.addLayer({ id: "route-line", type: "line", source: "route-line", paint: { "line-color": "#ffb703", "line-width": 4, "line-opacity": 0.85 } });
+                map.addLayer({ id: "places-circles", type: "circle", source: "places", paint: { "circle-radius": 8, "circle-color": "#3ddc97", "circle-stroke-width": 2, "circle-stroke-color": "#041016" } });
+                map.addLayer({ id: "places-labels", type: "symbol", source: "places", layout: { "text-field": ["get", "place_name"], "text-offset": [0, 1.2], "text-size": 12, "text-anchor": "top" }, paint: { "text-color": "#ecf3f6", "text-halo-color": "#041016", "text-halo-width": 1.2 } });
+                map.on("click", "places-circles", (event) => {
+                    const place = event.features[0].properties;
+                    updateActivePlace(place);
+                    new mapboxgl.Popup({ offset: 15 }).setLngLat([Number(place.longitude), Number(place.latitude)]).setHTML(`<strong>${place.place_name}</strong><br>${place.category}<br>${place.city}, ${place.state}<br><code>Lat ${formatCoordinate(place.latitude)}</code><br><code>Lng ${formatCoordinate(place.longitude)}</code>`).addTo(map);
+                });
+                map.on("mouseenter", "places-circles", () => { map.getCanvas().style.cursor = "pointer"; });
+                map.on("mouseleave", "places-circles", () => { map.getCanvas().style.cursor = ""; });
+                updateDistanceDisplay();
+                mapStatus.textContent = "3D satellite map ready. Click any point to inspect coordinates.";
+                mapStatus.className = "map-status-ok";
+            });
+        }
+        populateDistanceSelectors();
+        updateDistanceDisplay();
+        fromSelect.addEventListener("change", updateDistanceDisplay);
+        toSelect.addEventListener("change", updateDistanceDisplay);
+        resetDistance.addEventListener("click", () => {
+            fromSelect.value = "";
+            toSelect.value = "";
+            updateDistanceDisplay();
+        });
+        initMap();
+    </script>
 </body>
 </html>

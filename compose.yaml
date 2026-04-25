@@ -26,6 +26,7 @@ services:
       DB_USER: postgres
       DB_PASSWORD: postgres
       DB_PORT: 5432
+      MAPBOX_ACCESS_TOKEN: ${MAPBOX_ACCESS_TOKEN:-}
     volumes:
       - .:/app
 
