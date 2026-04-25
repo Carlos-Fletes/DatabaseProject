@@ -57,7 +57,7 @@
             padding: 16px;
             background: var(--panel);
             border: 1px solid var(--border);
-            border-radius: 18px;
+            border-radius: 8px;
             box-shadow: var(--shadow);
         }
         .stack { display: grid; gap: 10px; }
@@ -65,12 +65,13 @@
         select, input, button {
             width: 100%;
             border: 1px solid var(--border);
-            border-radius: 12px;
+            border-radius: 8px;
             padding: 11px 12px;
             background: rgba(255, 255, 255, 0.06);
             color: var(--text);
             font: inherit;
         }
+        input[type="checkbox"] { width: auto; margin: 0; accent-color: var(--accent); }
         button {
             cursor: pointer;
             background: linear-gradient(135deg, rgba(61, 220, 151, 0.24), rgba(61, 220, 151, 0.1));
@@ -80,7 +81,7 @@
             display: grid;
             gap: 6px;
             padding: 12px;
-            border-radius: 14px;
+            border-radius: 8px;
             background: rgba(255, 255, 255, 0.05);
         }
         .metric strong { font-size: 1.4rem; }
@@ -88,10 +89,51 @@
         .result-card {
             padding: 12px;
             border: 1px solid var(--border);
-            border-radius: 14px;
+            border-radius: 8px;
             background: rgba(255, 255, 255, 0.04);
         }
         .result-card strong { display: block; margin-bottom: 4px; }
+        .filter-list, .search-results, .legend { display: grid; gap: 8px; }
+        .filter-option, .legend-row, .search-result {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            min-height: 38px;
+            padding: 9px 10px;
+            border: 1px solid var(--border);
+            border-radius: 8px;
+            background: rgba(255, 255, 255, 0.04);
+        }
+        .filter-option { justify-content: space-between; color: var(--text); }
+        .filter-option span:first-of-type { flex: 1; }
+        .swatch {
+            width: 12px;
+            height: 12px;
+            flex: 0 0 12px;
+            border-radius: 50%;
+            box-shadow: 0 0 0 2px rgba(255,255,255,0.12);
+        }
+        .search-result {
+            width: 100%;
+            color: var(--text);
+            text-align: left;
+            background: rgba(142, 202, 230, 0.08);
+            border-color: rgba(142, 202, 230, 0.22);
+        }
+        .search-result small { display: block; color: var(--muted); margin-top: 3px; }
+        .empty-state { color: var(--muted); padding: 8px 2px; }
+        .map-tools {
+            position: absolute;
+            left: 22px;
+            bottom: 22px;
+            z-index: 2;
+            width: min(320px, calc(100% - 44px));
+            padding: 14px;
+            border: 1px solid var(--border);
+            border-radius: 8px;
+            background: var(--panel-strong);
+            box-shadow: var(--shadow);
+        }
         .map-overlay {
             position: absolute;
             top: 22px;
@@ -100,7 +142,7 @@
             width: min(340px, calc(100% - 44px));
             padding: 16px;
             border: 1px solid var(--border);
-            border-radius: 18px;
+            border-radius: 8px;
             background: var(--panel-strong);
             box-shadow: var(--shadow);
         }
@@ -114,6 +156,7 @@
             .sidebar { max-height: 42vh; border-right: 0; border-bottom: 1px solid var(--border); }
             #map { height: 60vh; }
             .map-overlay { top: 12px; right: 12px; left: 12px; width: auto; }
+            .map-tools { display: none; }
         }
     </style>
 </head>
@@ -147,6 +190,42 @@
                 </label>
                 <button type="submit">Run Nearby Search</button>
             </form>
+        </section>
+
+        <section class="panel">
+            <h2>Place Search</h2>
+            <div class="stack">
+                <label>
+                    Search by place, city, state, or category
+                    <input type="search" id="map-search" autocomplete="off" placeholder="Try Los Angeles, park, school">
+                </label>
+                <div id="search-results" class="search-results">
+                    <div class="empty-state">Start typing to search the mapped records.</div>
+                </div>
+            </div>
+        </section>
+
+        <section class="panel">
+            <h2>Layer Filters</h2>
+            <div class="filter-list">
+                {% for option in filter_options %}
+                    <label class="filter-option">
+                        <span class="swatch" style="background: {{ option.color }}"></span>
+                        <span>{{ option.label }}</span>
+                        <input class="point-filter" type="checkbox" value="{{ option.value }}" {% if option.checked %}checked{% endif %}>
+                    </label>
+                {% endfor %}
+                <label class="filter-option">
+                    <span class="swatch" style="background: #f79009"></span>
+                    <span>FEMA Risk Overlay</span>
+                    <input id="risk-toggle" type="checkbox" checked>
+                </label>
+                <label class="filter-option">
+                    <span class="swatch" style="background: #ecf3f6"></span>
+                    <span>County Boundaries</span>
+                    <input id="county-toggle" type="checkbox" checked>
+                </label>
+            </div>
         </section>
 
         <section class="panel">
@@ -222,7 +301,17 @@
             <p id="map-status" class="{% if mapbox_access_token %}map-status-ok{% else %}map-status-warn{% endif %}">
                 {% if mapbox_access_token %}Loading 3D satellite map...{% else %}Set MAPBOX_ACCESS_TOKEN to enable the 3D satellite map.{% endif %}
             </p>
-            <p class="note">The map uses your live `places` table data. Popups show the exact latitude and longitude stored in PostgreSQL.</p>
+            <p class="note">The map uses live database records, imported OSM points, Census counties, and FEMA state risk data.</p>
+        </div>
+        <div class="map-tools">
+            <h2>FEMA Risk</h2>
+            <div class="legend">
+                <div class="legend-row"><span class="swatch" style="background: #b42318"></span><span>Very High</span></div>
+                <div class="legend-row"><span class="swatch" style="background: #f04438"></span><span>Relatively High</span></div>
+                <div class="legend-row"><span class="swatch" style="background: #f79009"></span><span>Relatively Moderate</span></div>
+                <div class="legend-row"><span class="swatch" style="background: #12b76a"></span><span>Relatively Low</span></div>
+                <div class="legend-row"><span class="swatch" style="background: #2e90fa"></span><span>Very Low</span></div>
+            </div>
         </div>
         <div id="map"></div>
     </main>
@@ -230,6 +319,8 @@
     <script src="https://api.mapbox.com/mapbox-gl-js/v3.12.0/mapbox-gl.js"></script>
     <script>
         const places = {{ place_points|tojson }};
+        const mapPoints = {{ map_points|tojson }};
+        const riskAreas = {{ risk_areas|tojson }};
         const selectedPlaceId = {{ (selected_place_id or none)|tojson }};
         const mapboxToken = {{ mapbox_access_token|tojson }};
         const fromSelect = document.getElementById("from-select");
@@ -239,17 +330,68 @@
         const activePlacePanel = document.getElementById("active-place-panel");
         const mapStatus = document.getElementById("map-status");
         const resetDistance = document.getElementById("reset-distance");
+        const searchInput = document.getElementById("map-search");
+        const searchResults = document.getElementById("search-results");
+        const pointFilters = Array.from(document.querySelectorAll(".point-filter"));
+        const riskToggle = document.getElementById("risk-toggle");
+        const countyToggle = document.getElementById("county-toggle");
         const placeById = new Map(places.map((place) => [String(place.place_id), place]));
+        const pointById = new Map(mapPoints.map((place) => [String(place.place_id), place]));
         let map = null;
 
         function formatCoordinate(value) { return Number(value).toFixed(6); }
         function formatKilometers(value) { return `${value.toFixed(2)} km`; }
+        function escapeHtml(value) {
+            return String(value ?? "").replace(/[&<>"']/g, (char) => ({
+                "&": "&amp;",
+                "<": "&lt;",
+                ">": "&gt;",
+                '"': "&quot;",
+                "'": "&#39;"
+            }[char]));
+        }
         function haversineKm(fromPlace, toPlace) {
             const toRadians = (degrees) => degrees * (Math.PI / 180);
             const dLat = toRadians(toPlace.latitude - fromPlace.latitude);
             const dLng = toRadians(toPlace.longitude - fromPlace.longitude);
             const a = Math.sin(dLat / 2) ** 2 + Math.cos(toRadians(fromPlace.latitude)) * Math.cos(toRadians(toPlace.latitude)) * Math.sin(dLng / 2) ** 2;
             return 6371 * (2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a)));
+        }
+        function selectedGroups() {
+            return pointFilters.filter((input) => input.checked).map((input) => input.value);
+        }
+        function pointFeatureCollection(points) {
+            return {
+                type: "FeatureCollection",
+                features: points.map((place) => ({
+                    type: "Feature",
+                    geometry: { type: "Point", coordinates: [Number(place.longitude), Number(place.latitude)] },
+                    properties: place
+                }))
+            };
+        }
+        function pointMatchesActiveFilters(place) {
+            return selectedGroups().includes(place.filter_group);
+        }
+        function setLayerVisibility(layerId, visible) {
+            if (map && map.getLayer(layerId)) {
+                map.setLayoutProperty(layerId, "visibility", visible ? "visible" : "none");
+            }
+        }
+        function applyPointFilters() {
+            if (map && map.getLayer("map-points-circles")) {
+                const groups = selectedGroups();
+                const filter = groups.length
+                    ? ["match", ["get", "filter_group"], groups, true, false]
+                    : ["==", ["get", "filter_group"], "__none__"];
+                map.setFilter("map-points-circles", filter);
+                map.setFilter("map-points-labels", filter);
+            }
+            renderSearchResults();
+        }
+        function applyOverlayVisibility() {
+            setLayerVisibility("county-risk-fill", riskToggle.checked);
+            setLayerVisibility("county-boundaries", countyToggle.checked);
         }
         function populateDistanceSelectors() {
             const options = places.map((place) => `<option value="${place.place_id}">${place.place_name} (${place.city}, ${place.state})</option>`).join("");
@@ -265,7 +407,57 @@
             }
         }
         function updateActivePlace(place) {
-            activePlacePanel.innerHTML = `<h2>Active Place</h2><p><strong>${place.place_name}</strong></p><p>${place.category} in ${place.city}, ${place.state}</p><p>Latitude: <code>${formatCoordinate(place.latitude)}</code></p><p>Longitude: <code>${formatCoordinate(place.longitude)}</code></p>`;
+            activePlacePanel.innerHTML = `<h2>Active Place</h2><p><strong>${escapeHtml(place.place_name)}</strong></p><p>${escapeHtml(place.category || "Place")} in ${escapeHtml(place.city || "Unknown city")}, ${escapeHtml(place.state || "Unknown state")}</p><p>Latitude: <code>${formatCoordinate(place.latitude)}</code></p><p>Longitude: <code>${formatCoordinate(place.longitude)}</code></p><p class="hint">${escapeHtml(place.filter_label || "Mapped Record")}</p>`;
+        }
+        function popupHtmlForPoint(place) {
+            return `<strong>${escapeHtml(place.place_name)}</strong><br>${escapeHtml(place.category || "Place")}<br>${escapeHtml(place.city || "Unknown city")}, ${escapeHtml(place.state || "Unknown state")}<br><code>Lat ${formatCoordinate(place.latitude)}</code><br><code>Lng ${formatCoordinate(place.longitude)}</code>`;
+        }
+        function popupHtmlForCounty(props) {
+            const parsedRisk = Number(props.risk_index);
+            const riskIndex = Number.isFinite(parsedRisk) ? parsedRisk.toFixed(2) : "No score";
+            return `<strong>${escapeHtml(props.name)}</strong><br>${escapeHtml(props.state_name || props.state_abbr || "Unknown state")}<br>${escapeHtml(props.risk_bucket || "No Data")}<br><code>Risk ${riskIndex}</code>`;
+        }
+        function focusPoint(place, openPopup = true) {
+            updateActivePlace(place);
+            if (!map) { return; }
+            const coordinates = [Number(place.longitude), Number(place.latitude)];
+            map.flyTo({ center: coordinates, zoom: 12, pitch: 58, bearing: 8, essential: true });
+            if (openPopup && window.mapboxgl) {
+                new mapboxgl.Popup({ offset: 15 })
+                    .setLngLat(coordinates)
+                    .setHTML(popupHtmlForPoint(place))
+                    .addTo(map);
+            }
+        }
+        function renderSearchResults() {
+            const query = searchInput.value.trim().toLowerCase();
+            if (!query) {
+                searchResults.innerHTML = `<div class="empty-state">Start typing to search the mapped records.</div>`;
+                return;
+            }
+            const matches = mapPoints
+                .filter(pointMatchesActiveFilters)
+                .filter((place) => [
+                    place.place_name,
+                    place.city,
+                    place.state,
+                    place.category,
+                    place.filter_label
+                ].join(" ").toLowerCase().includes(query))
+                .slice(0, 8);
+            if (!matches.length) {
+                searchResults.innerHTML = `<div class="empty-state">No visible places match that search.</div>`;
+                return;
+            }
+            searchResults.innerHTML = "";
+            matches.forEach((place) => {
+                const button = document.createElement("button");
+                button.type = "button";
+                button.className = "search-result";
+                button.innerHTML = `<span>${escapeHtml(place.place_name)}</span><small>${escapeHtml(place.category || "Place")} · ${escapeHtml(place.city || "Unknown city")}, ${escapeHtml(place.state || "Unknown state")}</small>`;
+                button.addEventListener("click", () => focusPoint(place));
+                searchResults.appendChild(button);
+            });
         }
         function updateDistanceDisplay() {
             const fromPlace = placeById.get(fromSelect.value);
@@ -308,26 +500,51 @@
             map.on("load", () => {
                 map.addSource("mapbox-dem", { type: "raster-dem", url: "mapbox://mapbox.mapbox-terrain-dem-v1", tileSize: 512, maxzoom: 14 });
                 map.setTerrain({ source: "mapbox-dem", exaggeration: 1.25 });
-                map.addSource("places", {
-                    type: "geojson",
-                    data: {
-                        type: "FeatureCollection",
-                        features: places.map((place) => ({ type: "Feature", geometry: { type: "Point", coordinates: [place.longitude, place.latitude] }, properties: place }))
+                map.addSource("county-risk", { type: "geojson", data: riskAreas });
+                map.addLayer({
+                    id: "county-risk-fill",
+                    type: "fill",
+                    source: "county-risk",
+                    paint: {
+                        "fill-color": ["case", ["has", "risk_color"], ["to-color", ["get", "risk_color"]], "#667085"],
+                        "fill-opacity": 0.36
                     }
                 });
+                map.addLayer({
+                    id: "county-boundaries",
+                    type: "line",
+                    source: "county-risk",
+                    paint: {
+                        "line-color": "#ecf3f6",
+                        "line-opacity": 0.75,
+                        "line-width": 1.2
+                    }
+                });
+                map.addSource("map-points", { type: "geojson", data: pointFeatureCollection(mapPoints) });
                 map.addSource("route-line", { type: "geojson", data: { type: "FeatureCollection", features: [] } });
                 map.addLayer({ id: "route-line", type: "line", source: "route-line", paint: { "line-color": "#ffb703", "line-width": 4, "line-opacity": 0.85 } });
-                map.addLayer({ id: "places-circles", type: "circle", source: "places", paint: { "circle-radius": 8, "circle-color": "#3ddc97", "circle-stroke-width": 2, "circle-stroke-color": "#041016" } });
-                map.addLayer({ id: "places-labels", type: "symbol", source: "places", layout: { "text-field": ["get", "place_name"], "text-offset": [0, 1.2], "text-size": 12, "text-anchor": "top" }, paint: { "text-color": "#ecf3f6", "text-halo-color": "#041016", "text-halo-width": 1.2 } });
-                map.on("click", "places-circles", (event) => {
+                map.addLayer({ id: "map-points-circles", type: "circle", source: "map-points", paint: { "circle-radius": 8, "circle-color": ["case", ["has", "color"], ["to-color", ["get", "color"]], "#c77dff"], "circle-stroke-width": 2, "circle-stroke-color": "#041016" } });
+                map.addLayer({ id: "map-points-labels", type: "symbol", source: "map-points", layout: { "text-field": ["get", "place_name"], "text-offset": [0, 1.2], "text-size": 12, "text-anchor": "top" }, paint: { "text-color": "#ecf3f6", "text-halo-color": "#041016", "text-halo-width": 1.2 } });
+                map.on("click", "map-points-circles", (event) => {
                     const place = event.features[0].properties;
                     updateActivePlace(place);
-                    new mapboxgl.Popup({ offset: 15 }).setLngLat([Number(place.longitude), Number(place.latitude)]).setHTML(`<strong>${place.place_name}</strong><br>${place.category}<br>${place.city}, ${place.state}<br><code>Lat ${formatCoordinate(place.latitude)}</code><br><code>Lng ${formatCoordinate(place.longitude)}</code>`).addTo(map);
+                    new mapboxgl.Popup({ offset: 15 }).setLngLat([Number(place.longitude), Number(place.latitude)]).setHTML(popupHtmlForPoint(place)).addTo(map);
                 });
-                map.on("mouseenter", "places-circles", () => { map.getCanvas().style.cursor = "pointer"; });
-                map.on("mouseleave", "places-circles", () => { map.getCanvas().style.cursor = ""; });
+                map.on("click", "county-risk-fill", (event) => {
+                    const props = event.features[0].properties;
+                    new mapboxgl.Popup({ offset: 10 }).setLngLat(event.lngLat).setHTML(popupHtmlForCounty(props)).addTo(map);
+                });
+                map.on("mouseenter", "map-points-circles", () => { map.getCanvas().style.cursor = "pointer"; });
+                map.on("mouseleave", "map-points-circles", () => { map.getCanvas().style.cursor = ""; });
+                map.on("mouseenter", "county-risk-fill", () => { map.getCanvas().style.cursor = "pointer"; });
+                map.on("mouseleave", "county-risk-fill", () => { map.getCanvas().style.cursor = ""; });
+                applyPointFilters();
+                applyOverlayVisibility();
                 updateDistanceDisplay();
-                mapStatus.textContent = "3D satellite map ready. Click any point to inspect coordinates.";
+                if (selectedPlaceId && pointById.has(String(selectedPlaceId))) {
+                    focusPoint(pointById.get(String(selectedPlaceId)), false);
+                }
+                mapStatus.textContent = "3D satellite map ready with filters, search, and FEMA risk overlay.";
                 mapStatus.className = "map-status-ok";
             });
         }
@@ -340,6 +557,10 @@
             toSelect.value = "";
             updateDistanceDisplay();
         });
+        searchInput.addEventListener("input", renderSearchResults);
+        pointFilters.forEach((input) => input.addEventListener("change", applyPointFilters));
+        riskToggle.addEventListener("change", applyOverlayVisibility);
+        countyToggle.addEventListener("change", applyOverlayVisibility);
         initMap();
     </script>
 </body>

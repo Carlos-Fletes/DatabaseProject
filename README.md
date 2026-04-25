@@ -33,7 +33,7 @@ docker compose up --build
 Open the app:
 
 ```text
-http://localhost:5000
+http://localhost:5001
 ```
 
 Stop the app:
@@ -79,6 +79,20 @@ Import U.S. cities:
 
 ```bash
 docker compose exec web python import_us_cities.py
+```
+
+## Tests
+
+Run the unit tests:
+
+```bash
+python -m unittest discover -s tests
+```
+
+If you want the Flask route tests to run too, run them in an environment with the project requirements installed, such as the web container:
+
+```bash
+docker compose exec web python -m unittest discover -s tests
 ```
 
 ## App Routes

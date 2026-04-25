@@ -14,6 +14,11 @@ OVERPASS_URLS = [
     "https://overpass.kumi.systems/api/interpreter"
 ]
 
+OVERPASS_HEADERS = {
+    "User-Agent": "DatabaseProject GIS import script",
+    "Accept": "application/json",
+}
+
 # Much smaller box around Griffith Observatory / Hollywood area
 # south,west,north,east
 QUERY = """
@@ -40,7 +45,7 @@ def fetch_overpass():
     last_error = None
     for url in OVERPASS_URLS:
         try:
-            resp = requests.get(url, params={"data": QUERY}, timeout=60)
+            resp = requests.post(url, data={"data": QUERY}, headers=OVERPASS_HEADERS, timeout=60)
             resp.raise_for_status()
             return resp.json()
         except Exception as e:

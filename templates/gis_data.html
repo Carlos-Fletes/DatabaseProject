@@ -31,19 +31,19 @@
         {% endfor %}
     </table>
 
-    <h2>FEMA Risk Counties</h2>
+    <h2>FEMA Risk States</h2>
     <table>
-        <tr><th>County GEOID</th><th>County</th><th>State</th><th>Risk Index</th></tr>
+        <tr><th>State</th><th>Name</th><th>Risk Index</th><th>Risk Rating</th></tr>
         {% for r in risk_rows %}
         <tr><td>{{ r[0] }}</td><td>{{ r[1] }}</td><td>{{ r[2] }}</td><td>{{ r[3] }}</td></tr>
         {% endfor %}
     </table>
 
-    <h2>Your Places Joined to County + Risk</h2>
+    <h2>Your Places Joined to County + State Risk</h2>
     <table>
-        <tr><th>Place</th><th>County</th><th>Risk Index</th></tr>
+        <tr><th>Place</th><th>County</th><th>State</th><th>Risk Index</th><th>Risk Rating</th></tr>
         {% for r in joined_rows %}
-        <tr><td>{{ r[0] }}</td><td>{{ r[1] }}</td><td>{{ r[2] }}</td></tr>
+        <tr><td>{{ r[0] }}</td><td>{{ r[1] }}</td><td>{{ r[2] }}</td><td>{{ r[3] }}</td><td>{{ r[4] }}</td></tr>
         {% endfor %}
     </table>
 </body>
