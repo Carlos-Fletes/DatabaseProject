@@ -5,11 +5,10 @@ import time
 import json
 from geo_features import (
     category_filter_options,
-    county_risk_feature,
-    feature_collection,
     nearby_row_to_dict,
     osm_row_to_dict,
     place_row_to_dict,
+    risk_summary,
     state_abbr_from_fips,
 )
 
@@ -165,26 +164,47 @@ def fetch_risk_areas(cur):
             c.name,
             c.statefp,
             frc.risk_index,
-            ST_AsGeoJSON(c.geom)
+            ST_AsGeoJSON(ST_SimplifyPreserveTopology(c.geom, 0.01))
         FROM census_counties c
         LEFT JOIN fema_risk_counties frc
           ON c.geoid = REPLACE(frc.county_geoid, 'C', '')
         WHERE c.geom IS NOT NULL
-        ORDER BY c.geoid
-        LIMIT 500;
+        ORDER BY c.geoid;
     """)
     rows = cur.fetchall()
 
+    cur.execute("""
+        SELECT state_abbr, state_name, risk_index, risk_rating
+        FROM fema_risk_states;
+    """)
+    risk_by_state = {
+        row[0]: {
+            "state_name": row[1],
+            "risk_index": row[2],
+            "risk_rating": row[3],
+        }
+        for row in cur.fetchall()
+    }
+
     features = []
     for geoid, name, statefp, risk_index, geom in rows:
+        state_abbr = state_abbr_from_fips(statefp)
+        state_risk = risk_by_state.get(state_abbr, {})
+        risk = risk_summary(
+            risk_index if risk_index is not None else state_risk.get("risk_index"),
+            None if risk_index is not None else state_risk.get("risk_rating"),
+        )
         features.append({
             "type": "Feature",
             "geometry": json.loads(geom),
             "properties": {
                 "geoid": geoid,
                 "name": name,
-                "state": state_abbr_from_fips(statefp),
-                "risk_index": float(risk_index) if risk_index is not None else None
+                "state": state_abbr,
+                "state_abbr": state_abbr,
+                "state_name": state_risk.get("state_name"),
+                "risk_source": "County" if risk_index is not None else "State",
+                **risk,
             }
         })
 

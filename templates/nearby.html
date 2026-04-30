@@ -415,7 +415,7 @@
         function popupHtmlForCounty(props) {
             const parsedRisk = Number(props.risk_index);
             const riskIndex = Number.isFinite(parsedRisk) ? parsedRisk.toFixed(2) : "No score";
-            return `<strong>${escapeHtml(props.name)}</strong><br>${escapeHtml(props.state_name || props.state_abbr || "Unknown state")}<br>${escapeHtml(props.risk_bucket || "No Data")}<br><code>Risk ${riskIndex}</code>`;
+            return `<strong>${escapeHtml(props.name)}</strong><br>${escapeHtml(props.state_name || props.state_abbr || "Unknown state")}<br>${escapeHtml(props.risk_bucket || "No Data")}<br><code>${escapeHtml(props.risk_source || "Risk")} ${riskIndex}</code>`;
         }
         function focusPoint(place, openPopup = true) {
             updateActivePlace(place);
@@ -506,8 +506,17 @@
                     type: "fill",
                     source: "county-risk",
                     paint: {
-                        "fill-color": ["case", ["has", "risk_color"], ["to-color", ["get", "risk_color"]], "#667085"],
-                        "fill-opacity": 0.36
+                        "fill-color": [
+                            "match",
+                            ["get", "risk_bucket"],
+                            "Very High", "#b42318",
+                            "Relatively High", "#f04438",
+                            "Relatively Moderate", "#f79009",
+                            "Relatively Low", "#12b76a",
+                            "Very Low", "#2e90fa",
+                            "#667085"
+                        ],
+                        "fill-opacity": 0.42
                     }
                 });
                 map.addLayer({
