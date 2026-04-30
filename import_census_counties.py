@@ -22,7 +22,7 @@ def get_conn():
 
 def fetch_page(offset):
     params = {
-        "where": "STATE='06'",          # California
+        "where": "1=1",
         "outFields": "GEOID,NAME,STATE,COUNTY",
         "returnGeometry": "true",
         "f": "geojson",

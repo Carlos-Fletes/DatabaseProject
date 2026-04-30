@@ -1,6 +1,7 @@
 (function () {
     const config = window.MAPBOX_CONFIG || {};
     const geojson = window.PLACES_GEOJSON;
+    const riskAreas = window.RISK_AREAS_GEOJSON;
     const placeById = new Map();
     let map;
     let selectedPair = { from: null, to: null };
@@ -30,6 +31,13 @@
         return `${value.toFixed(2)} km`;
     }
 
+    function formatRisk(value) {
+        if (value === null || value === undefined || value === '') {
+            return 'No FEMA risk data';
+        }
+        return String(value);
+    }
+
     function haversineKm(fromCoords, toCoords) {
         const [lng1, lat1] = fromCoords;
         const [lng2, lat2] = toCoords;
@@ -54,6 +62,18 @@
                 <span>${props.address}, ${props.city}, ${props.state}</span>
                 <code>Latitude: ${formatCoordinate(props.latitude)}</code>
                 <code>Longitude: ${formatCoordinate(props.longitude)}</code>
+            </div>
+        `;
+    }
+
+    function buildCountyPopupHtml(feature) {
+        const props = feature.properties || {};
+        return `
+            <div class="popup-grid">
+                <strong>${props.name || 'County'}</strong>
+                <span>${props.state || ''}</span>
+                <span>County GEOID: ${props.geoid || 'Unknown'}</span>
+                <span>County FEMA Risk Index: ${formatRisk(props.risk_index)}</span>
             </div>
         `;
     }
@@ -390,12 +410,61 @@
         map.addControl(new mapboxgl.ScaleControl({ unit: 'metric' }), 'bottom-left');
 
         map.on('load', () => {
-            map.addSource('mapbox-dem', {
-                type: 'raster-dem',
-                url: 'mapbox://mapbox.mapbox-terrain-dem-v1',
-                tileSize: 512,
-                maxzoom: 14
-            });
+            if (riskAreas && Array.isArray(riskAreas.features)) {
+                map.addSource('county-risk', {
+                    type: 'geojson',
+                    data: riskAreas
+                });
+
+                map.addLayer({
+                    id: 'county-risk-fill',
+                    type: 'fill',
+                    source: 'county-risk',
+                    paint: {
+                        'fill-color': [
+                            'interpolate',
+                            ['linear'],
+                            ['coalesce', ['to-number', ['get', 'risk_index']], 0],
+                            0, '#f2f0f7',
+                            20, '#cbc9e2',
+                            40, '#9e9ac8',
+                            60, '#756bb1',
+                            80, '#54278f'
+                        ],
+                        'fill-opacity': 0.35
+                    }
+                });
+
+                map.addLayer({
+                    id: 'county-risk-outline',
+                    type: 'line',
+                    source: 'county-risk',
+                    paint: {
+                        'line-color': '#ffffff',
+                        'line-width': 1
+                    }
+                });
+
+                map.on('click', 'county-risk-fill', (event) => {
+                    const feature = event.features && event.features[0];
+                    if (!feature) {
+                        return;
+                    }
+
+                    new mapboxgl.Popup({ offset: 15 })
+                        .setLngLat(event.lngLat)
+                        .setHTML(buildCountyPopupHtml(feature))
+                        .addTo(map);
+                });
+
+                map.on('mouseenter', 'county-risk-fill', () => {
+                    map.getCanvas().style.cursor = 'pointer';
+                });
+
+                map.on('mouseleave', 'county-risk-fill', () => {
+                    map.getCanvas().style.cursor = '';
+                });
+            }
 
             map.setTerrain({ source: 'mapbox-dem', exaggeration: 1.25 });
             map.setFog({
@@ -463,7 +532,8 @@
             ensureMapLayers();
             updateNearbyResults();
             updateDistanceDisplay();
-            setStatus('3D satellite map ready. Click points to inspect exact coordinates.', 'status-ok');
+            setStatus('3D satellite map ready with county FEMA overlay. Click points or counties to inspect details.', 'status-ok');
+
             map.on('click', 'places-circles', (event) => {
                 const feature = event.features && event.features[0];
                 if (!feature) {
@@ -502,15 +572,18 @@
         updateActivePlace(null);
         bindUiEvents();
 
-        selectedPair = {
-            from: String(geojson.features[0].properties.place_id),
-            to: String(geojson.features[1].properties.place_id)
-        };
-        selectedNearbyOrigin = String(geojson.features[2].properties.place_id);
+        if (geojson.features.length >= 3) {
+            selectedPair = {
+                from: String(geojson.features[0].properties.place_id),
+                to: String(geojson.features[1].properties.place_id)
+            };
+            selectedNearbyOrigin = String(geojson.features[2].properties.place_id);
 
-        els.fromSelect.value = selectedPair.from;
-        els.toSelect.value = selectedPair.to;
-        els.nearbyOrigin.value = selectedNearbyOrigin;
+            els.fromSelect.value = selectedPair.from;
+            els.toSelect.value = selectedPair.to;
+            els.nearbyOrigin.value = selectedNearbyOrigin;
+        }
+
         els.nearbyRadius.value = '5';
         els.nearbyRadiusValue.textContent = '5 km';
         return true;
