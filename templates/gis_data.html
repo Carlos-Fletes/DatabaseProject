@@ -17,9 +17,15 @@
 
     <h2>OSM Places</h2>
     <table>
-        <tr><th>OSM ID</th><th>Name</th><th>Type</th></tr>
+        <tr><th>OSM ID</th><th>Name</th><th>Type</th><th>City</th><th>State</th></tr>
         {% for r in osm_rows %}
-        <tr><td>{{ r[0] }}</td><td>{{ r[1] }}</td><td>{{ r[2] }}</td></tr>
+        <tr>
+            <td>{{ r[0] }}</td>
+            <td>{{ r[1] }}</td>
+            <td>{{ r[2] }}</td>
+            <td>{{ r[3] }}</td>
+            <td>{{ r[4] }}</td>
+        </tr>
         {% endfor %}
     </table>
 
@@ -27,7 +33,10 @@
     <table>
         <tr><th>GEOID</th><th>Name</th></tr>
         {% for r in county_rows %}
-        <tr><td>{{ r[0] }}</td><td>{{ r[1] }}</td></tr>
+        <tr>
+            <td>{{ r[0] }}</td>
+            <td>{{ r[1] }}</td>
+        </tr>
         {% endfor %}
     </table>
 
@@ -35,15 +44,34 @@
     <table>
         <tr><th>State</th><th>Name</th><th>Risk Index</th><th>Risk Rating</th></tr>
         {% for r in risk_rows %}
-        <tr><td>{{ r[0] }}</td><td>{{ r[1] }}</td><td>{{ r[2] }}</td><td>{{ r[3] }}</td></tr>
+        <tr>
+            <td>{{ r[0] }}</td>
+            <td>{{ r[1] }}</td>
+            <td>{{ r[2] }}</td>
+            <td>{{ r[3] }}</td>
+        </tr>
         {% endfor %}
     </table>
 
     <h2>Your Places Joined to County + State Risk</h2>
     <table>
-        <tr><th>Place</th><th>County</th><th>State</th><th>Risk Index</th><th>Risk Rating</th></tr>
+        <tr>
+            <th>Place</th>
+            <th>County</th>
+            <th>State</th>
+            <th>County Risk Index</th>
+            <th>State Risk Index</th>
+            <th>State Risk Rating</th>
+        </tr>
         {% for r in joined_rows %}
-        <tr><td>{{ r[0] }}</td><td>{{ r[1] }}</td><td>{{ r[2] }}</td><td>{{ r[3] }}</td><td>{{ r[4] }}</td></tr>
+        <tr>
+            <td>{{ r[0] }}</td>
+            <td>{{ r[1] if r[1] else 'Not matched' }}</td>
+            <td>{{ r[2] if r[2] else 'Not matched' }}</td>
+            <td>{{ r[3] if r[3] is not none else 'No county risk data' }}</td>
+            <td>{{ r[4] if r[4] is not none else 'No state risk data' }}</td>
+            <td>{{ r[5] if r[5] else 'No rating' }}</td>
+        </tr>
         {% endfor %}
     </table>
 </body>

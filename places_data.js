@@ -88,3 +88,104 @@ window.PLACES_GEOJSON = {
         }
     ]
 };
+
+window.RISK_AREAS_GEOJSON = {
+    type: 'FeatureCollection',
+    features: [
+        {
+            type: 'Feature',
+            geometry: {
+                type: 'Polygon',
+                coordinates: [[
+                    [-118.9448, 34.8233],
+                    [-117.6462, 34.8233],
+                    [-117.6462, 33.7037],
+                    [-118.9448, 33.7037],
+                    [-118.9448, 34.8233]
+                ]]
+            },
+            properties: {
+                geoid: '06037',
+                name: 'Los Angeles County',
+                state: 'CA',
+                risk_index: 72.4
+            }
+        },
+        {
+            type: 'Feature',
+            geometry: {
+                type: 'Polygon',
+                coordinates: [[
+                    [-74.2557, 40.9156],
+                    [-73.7004, 40.9156],
+                    [-73.7004, 40.4961],
+                    [-74.2557, 40.4961],
+                    [-74.2557, 40.9156]
+                ]]
+            },
+            properties: {
+                geoid: '36061',
+                name: 'New York County',
+                state: 'NY',
+                risk_index: 48.2
+            }
+        },
+        {
+            type: 'Feature',
+            geometry: {
+                type: 'Polygon',
+                coordinates: [[
+                    [-87.9401, 42.0230],
+                    [-87.5237, 42.0230],
+                    [-87.5237, 41.6445],
+                    [-87.9401, 41.6445],
+                    [-87.9401, 42.0230]
+                ]]
+            },
+            properties: {
+                geoid: '17031',
+                name: 'Cook County',
+                state: 'IL',
+                risk_index: 55.8
+            }
+        },
+        {
+            type: 'Feature',
+            geometry: {
+                type: 'Polygon',
+                coordinates: [[
+                    [-122.4597, 47.7341],
+                    [-122.2244, 47.7341],
+                    [-122.2244, 47.4919],
+                    [-122.4597, 47.4919],
+                    [-122.4597, 47.7341]
+                ]]
+            },
+            properties: {
+                geoid: '53033',
+                name: 'King County',
+                state: 'WA',
+                risk_index: 39.6
+            }
+        },
+        {
+            type: 'Feature',
+            geometry: {
+                type: 'Polygon',
+                coordinates: [[
+                    [-98.8087, 29.6485],
+                    [-98.1877, 29.6485],
+                    [-98.1877, 29.1871],
+                    [-98.8087, 29.1871],
+                    [-98.8087, 29.6485]
+                ]]
+            },
+            properties: {
+                geoid: '48029',
+                name: 'Bexar County',
+                state: 'TX',
+                risk_index: 61.3
+            }
+        }
+    ]
+};

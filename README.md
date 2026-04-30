@@ -124,3 +124,9 @@ erDiagram
         GEOGRAPHY location
     }
 ```
+
+## data import
+## might have to do this first
+docker compose exec web python download_county_data.py
+docker compose exec web python import_census_counties.py 
+
