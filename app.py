@@ -92,8 +92,20 @@ def init_extra_tables():
             county_geoid TEXT PRIMARY KEY,
             county_name TEXT,
             state_abbr TEXT,
-            risk_index NUMERIC
+            risk_index NUMERIC,
+            risk_rating TEXT,
+            top_hazards JSONB
         );
+    """)
+
+    cur.execute("""
+        ALTER TABLE fema_risk_counties
+        ADD COLUMN IF NOT EXISTS risk_rating TEXT;
+    """)
+
+    cur.execute("""
+        ALTER TABLE fema_risk_counties
+        ADD COLUMN IF NOT EXISTS top_hazards JSONB;
     """)
 
     cur.execute("""
@@ -157,6 +169,18 @@ def fetch_osm_points(cur):
     return [osm_row_to_dict(row) for row in cur.fetchall()]
 
 
+def normalize_json_list(value):
+    if isinstance(value, list):
+        return value
+    if isinstance(value, str):
+        try:
+            parsed = json.loads(value)
+        except json.JSONDecodeError:
+            return []
+        return parsed if isinstance(parsed, list) else []
+    return []
+
+
 def fetch_risk_areas(cur):
     cur.execute("""
         SELECT
@@ -164,6 +188,8 @@ def fetch_risk_areas(cur):
             c.name,
             c.statefp,
             frc.risk_index,
+            frc.risk_rating,
+            frc.top_hazards,
             ST_AsGeoJSON(ST_SimplifyPreserveTopology(c.geom, 0.01))
         FROM census_counties c
         LEFT JOIN fema_risk_counties frc
@@ -187,13 +213,15 @@ def fetch_risk_areas(cur):
     }
 
     features = []
-    for geoid, name, statefp, risk_index, geom in rows:
+    for geoid, name, statefp, risk_index, risk_rating, top_hazards, geom in rows:
         state_abbr = state_abbr_from_fips(statefp)
         state_risk = risk_by_state.get(state_abbr, {})
-        risk = risk_summary(
-            risk_index if risk_index is not None else state_risk.get("risk_index"),
-            None if risk_index is not None else state_risk.get("risk_rating"),
-        )
+        state_summary = risk_summary(state_risk.get("risk_index"), state_risk.get("risk_rating"))
+        county_summary = risk_summary(risk_index, risk_rating)
+        has_county_risk = risk_index is not None or risk_rating is not None
+        local_summary = county_summary if has_county_risk else state_summary
+        local_source = "County" if has_county_risk else "State"
+
         features.append({
             "type": "Feature",
             "geometry": json.loads(geom),
@@ -203,8 +231,17 @@ def fetch_risk_areas(cur):
                 "state": state_abbr,
                 "state_abbr": state_abbr,
                 "state_name": state_risk.get("state_name"),
-                "risk_source": "County" if risk_index is not None else "State",
-                **risk,
+                "risk_index": local_summary["risk_index"],
+                "risk_bucket": local_summary["risk_bucket"],
+                "risk_color": local_summary["risk_color"],
+                "risk_source": local_source,
+                "state_risk_index": state_summary["risk_index"],
+                "state_risk_bucket": state_summary["risk_bucket"],
+                "state_risk_color": state_summary["risk_color"],
+                "county_risk_index": county_summary["risk_index"],
+                "county_risk_bucket": county_summary["risk_bucket"],
+                "county_risk_color": county_summary["risk_color"],
+                "top_hazards": json.dumps(normalize_json_list(top_hazards)),
             }
         })
 
@@ -474,12 +511,24 @@ def gis_data():
     }
 
     cur.execute("""
+        SELECT county_geoid, county_name, state_abbr, risk_index, risk_rating, top_hazards
+        FROM fema_risk_counties
+        ORDER BY risk_index DESC NULLS LAST
+        LIMIT 20;
+    """)
+    county_risk_rows = [
+        (*row[:5], normalize_json_list(row[5]))
+        for row in cur.fetchall()
+    ]
+
+    cur.execute("""
         SELECT
             p.place_name,
             c.name AS county_name,
             c.statefp,
             c.geoid,
-            frc.risk_index
+            frc.risk_index,
+            frc.risk_rating
         FROM places p
         LEFT JOIN census_counties c
           ON ST_Within(p.location::geometry, c.geom)
@@ -489,7 +538,7 @@ def gis_data():
     """)
 
     joined_rows = []
-    for place_name, county_name, statefp, geoid, county_risk in cur.fetchall():
+    for place_name, county_name, statefp, geoid, county_risk, county_rating in cur.fetchall():
         state_abbr = state_abbr_from_fips(statefp) if statefp else None
         state_risk = risk_by_state.get(state_abbr, {}) if state_abbr else {}
 
@@ -498,6 +547,7 @@ def gis_data():
             county_name,
             state_abbr,
             county_risk,
+            county_rating,
             state_risk.get("risk_index"),
             state_risk.get("risk_rating"),
         ))
@@ -510,6 +560,7 @@ def gis_data():
         osm_rows=osm_rows,
         county_rows=county_rows,
         risk_rows=risk_rows,
+        county_risk_rows=county_risk_rows,
         joined_rows=joined_rows
     )
 

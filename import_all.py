@@ -7,6 +7,7 @@ commands = [
     ["python", "-u", "import_osm_schools.py"],
     ["python", "-u", "import_census_counties.py"],
     ["python", "-u", "import_fema_risk.py"],
+    ["python", "-u", "import_fema_county_risk.py"],
 ]
 
 for cmd in commands:

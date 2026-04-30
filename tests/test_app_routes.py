@@ -37,7 +37,15 @@ class FakeCursor:
             ]
         if "ST_AsGeoJSON" in query:
             return [
-                ("06037", "Los Angeles County", "06", None, '{"type":"MultiPolygon","coordinates":[]}'),
+                (
+                    "06037",
+                    "Los Angeles County",
+                    "06",
+                    91.2,
+                    "Very High",
+                    [{"label": "Wildfire", "score": 88.4, "rating": "Relatively High"}],
+                    '{"type":"MultiPolygon","coordinates":[]}',
+                ),
             ]
         if "FROM fema_risk_states" in query:
             return [

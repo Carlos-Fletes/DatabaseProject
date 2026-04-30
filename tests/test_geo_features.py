@@ -59,6 +59,12 @@ class GeoFeatureTests(unittest.TestCase):
         self.assertEqual(risk["risk_bucket"], "Very High")
         self.assertEqual(risk["risk_color"], "#b42318")
 
+    def test_risk_summary_prefers_fema_rating_over_score_threshold(self):
+        risk = risk_summary(57.6, "Relatively Low")
+
+        self.assertEqual(risk["risk_bucket"], "Relatively Low")
+        self.assertEqual(risk["risk_color"], "#12b76a")
+
     def test_risk_summary_falls_back_to_score_bucket(self):
         risk = risk_summary(42, None)
 
