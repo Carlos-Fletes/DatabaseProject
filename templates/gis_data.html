@@ -53,13 +53,33 @@
         {% endfor %}
     </table>
 
-    <h2>Your Places Joined to County + State Risk</h2>
+    <h2>FEMA Risk Counties</h2>
+    <table>
+        <tr><th>County GEOID</th><th>County</th><th>State</th><th>Risk Index</th><th>Risk Rating</th><th>Top Drivers</th></tr>
+        {% for r in county_risk_rows %}
+        <tr>
+            <td>{{ r[0] }}</td>
+            <td>{{ r[1] }}</td>
+            <td>{{ r[2] }}</td>
+            <td>{{ r[3] }}</td>
+            <td>{{ r[4] }}</td>
+            <td>
+                {% for hazard in r[5] or [] %}
+                    {{ hazard.label }} ({{ hazard.score }}){% if not loop.last %}, {% endif %}
+                {% endfor %}
+            </td>
+        </tr>
+        {% endfor %}
+    </table>
+
+    <h2>Your Places Joined to County + FEMA Risk</h2>
     <table>
         <tr>
             <th>Place</th>
             <th>County</th>
             <th>State</th>
             <th>County Risk Index</th>
+            <th>County Risk Rating</th>
             <th>State Risk Index</th>
             <th>State Risk Rating</th>
         </tr>
@@ -69,8 +89,9 @@
             <td>{{ r[1] if r[1] else 'Not matched' }}</td>
             <td>{{ r[2] if r[2] else 'Not matched' }}</td>
             <td>{{ r[3] if r[3] is not none else 'No county risk data' }}</td>
-            <td>{{ r[4] if r[4] is not none else 'No state risk data' }}</td>
-            <td>{{ r[5] if r[5] else 'No rating' }}</td>
+            <td>{{ r[4] if r[4] else 'No county rating' }}</td>
+            <td>{{ r[5] if r[5] is not none else 'No state risk data' }}</td>
+            <td>{{ r[6] if r[6] else 'No state rating' }}</td>
         </tr>
         {% endfor %}
     </table>

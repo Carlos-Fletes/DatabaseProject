@@ -148,6 +148,37 @@
         }
         .map-status-ok { color: var(--accent); }
         .map-status-warn { color: var(--accent-2); }
+        .mapboxgl-popup { max-width: 340px !important; }
+        .mapboxgl-popup-content {
+            padding: 14px 16px;
+            border: 1px solid rgba(255, 255, 255, 0.18);
+            border-radius: 8px;
+            background: #06111a;
+            color: var(--text);
+            box-shadow: 0 18px 50px rgba(0, 0, 0, 0.48);
+            font-family: "IBM Plex Sans", "Segoe UI", sans-serif;
+        }
+        .mapboxgl-popup-tip {
+            border-top-color: #06111a !important;
+            border-right-color: #06111a !important;
+            border-bottom-color: #06111a !important;
+            border-left-color: #06111a !important;
+        }
+        .mapboxgl-popup-close-button { color: var(--text); font-size: 1.1rem; padding: 4px 8px; }
+        .risk-popup { display: grid; gap: 8px; min-width: 250px; }
+        .risk-popup strong { font-size: 1rem; }
+        .risk-popup code { color: #dff7ed; }
+        .risk-drivers { display: grid; gap: 6px; margin-top: 2px; }
+        .risk-driver {
+            display: grid;
+            grid-template-columns: 1fr auto;
+            gap: 8px;
+            padding: 7px 8px;
+            border: 1px solid rgba(255,255,255,0.12);
+            border-radius: 8px;
+            background: rgba(255,255,255,0.06);
+        }
+        .risk-driver span:last-child { color: var(--accent-2); font-family: "IBM Plex Mono", monospace; }
         table { width: 100%; border-collapse: collapse; margin-top: 12px; font-size: 0.95rem; }
         th, td { border: 1px solid var(--border); padding: 8px; text-align: left; vertical-align: top; }
         code { font-family: "IBM Plex Mono", monospace; }
@@ -305,6 +336,7 @@
         </div>
         <div class="map-tools">
             <h2>FEMA Risk</h2>
+            <p id="risk-detail-mode" class="note">Zoom changes the active risk detail.</p>
             <div class="legend">
                 <div class="legend-row"><span class="swatch" style="background: #b42318"></span><span>Very High</span></div>
                 <div class="legend-row"><span class="swatch" style="background: #f04438"></span><span>Relatively High</span></div>
@@ -335,9 +367,11 @@
         const pointFilters = Array.from(document.querySelectorAll(".point-filter"));
         const riskToggle = document.getElementById("risk-toggle");
         const countyToggle = document.getElementById("county-toggle");
+        const riskDetailMode = document.getElementById("risk-detail-mode");
         const placeById = new Map(places.map((place) => [String(place.place_id), place]));
         const pointById = new Map(mapPoints.map((place) => [String(place.place_id), place]));
         let map = null;
+        const COUNTY_RISK_ZOOM = 6;
 
         function formatCoordinate(value) { return Number(value).toFixed(6); }
         function formatKilometers(value) { return `${value.toFixed(2)} km`; }
@@ -378,6 +412,9 @@
                 map.setLayoutProperty(layerId, "visibility", visible ? "visible" : "none");
             }
         }
+        function currentRiskMode() {
+            return map && map.getZoom() >= COUNTY_RISK_ZOOM ? "county" : "state";
+        }
         function applyPointFilters() {
             if (map && map.getLayer("map-points-circles")) {
                 const groups = selectedGroups();
@@ -390,8 +427,15 @@
             renderSearchResults();
         }
         function applyOverlayVisibility() {
-            setLayerVisibility("county-risk-fill", riskToggle.checked);
+            if (!map) { return; }
+            const mode = currentRiskMode();
+            const showRisk = riskToggle.checked;
+            setLayerVisibility("state-risk-fill", showRisk && mode === "state");
+            setLayerVisibility("county-risk-fill", showRisk && mode === "county");
             setLayerVisibility("county-boundaries", countyToggle.checked);
+            riskDetailMode.textContent = mode === "county"
+                ? "County detail active. Missing county scores fall back to state risk."
+                : "State overview active. Zoom in for county detail.";
         }
         function populateDistanceSelectors() {
             const options = places.map((place) => `<option value="${place.place_id}">${place.place_name} (${place.city}, ${place.state})</option>`).join("");
@@ -412,10 +456,48 @@
         function popupHtmlForPoint(place) {
             return `<strong>${escapeHtml(place.place_name)}</strong><br>${escapeHtml(place.category || "Place")}<br>${escapeHtml(place.city || "Unknown city")}, ${escapeHtml(place.state || "Unknown state")}<br><code>Lat ${formatCoordinate(place.latitude)}</code><br><code>Lng ${formatCoordinate(place.longitude)}</code>`;
         }
-        function popupHtmlForCounty(props) {
-            const parsedRisk = Number(props.risk_index);
+        function parseTopHazards(value) {
+            if (!value) { return []; }
+            if (Array.isArray(value)) { return value; }
+            try {
+                const parsed = JSON.parse(value);
+                return Array.isArray(parsed) ? parsed : [];
+            } catch {
+                return [];
+            }
+        }
+        function riskDriverHtml(props) {
+            const hazards = parseTopHazards(props.top_hazards);
+            if (!hazards.length) {
+                return `<div class="hint">No hazard driver details loaded for this county.</div>`;
+            }
+            return `<div class="risk-drivers">${hazards.map((hazard) => {
+                const score = Number(hazard.score);
+                const scoreLabel = Number.isFinite(score) ? score.toFixed(1) : "n/a";
+                return `<div class="risk-driver"><span>${escapeHtml(hazard.label)}<br><small>${escapeHtml(hazard.rating || "No rating")}</small></span><span>${scoreLabel}</span></div>`;
+            }).join("")}</div>`;
+        }
+        function popupHtmlForCounty(props, mode = currentRiskMode()) {
+            let source = "State";
+            let bucket = props.state_risk_bucket || props.risk_bucket || "No Data";
+            let rawRisk = props.state_risk_index ?? props.risk_index;
+            if (mode === "county") {
+                if (props.risk_source === "County") {
+                    source = "County";
+                    bucket = props.county_risk_bucket || props.risk_bucket || "No Data";
+                    rawRisk = props.county_risk_index ?? props.risk_index;
+                } else {
+                    source = "State fallback";
+                    bucket = props.risk_bucket || props.state_risk_bucket || "No Data";
+                    rawRisk = props.risk_index ?? props.state_risk_index;
+                }
+            }
+            const parsedRisk = Number(rawRisk);
             const riskIndex = Number.isFinite(parsedRisk) ? parsedRisk.toFixed(2) : "No score";
-            return `<strong>${escapeHtml(props.name)}</strong><br>${escapeHtml(props.state_name || props.state_abbr || "Unknown state")}<br>${escapeHtml(props.risk_bucket || "No Data")}<br><code>Risk ${riskIndex}</code>`;
+            const explanation = mode === "county"
+                ? `<div><strong>Top risk drivers</strong>${riskDriverHtml(props)}</div>`
+                : `<div class="hint">Zoom in for county-level hazard drivers.</div>`;
+            return `<div class="risk-popup"><strong>${escapeHtml(props.name)}</strong><span>${escapeHtml(props.state_name || props.state_abbr || "Unknown state")}</span><span>${escapeHtml(bucket)}</span><code>${escapeHtml(source)} ${riskIndex}</code>${explanation}</div>`;
         }
         function focusPoint(place, openPopup = true) {
             updateActivePlace(place);
@@ -502,12 +584,39 @@
                 map.setTerrain({ source: "mapbox-dem", exaggeration: 1.25 });
                 map.addSource("county-risk", { type: "geojson", data: riskAreas });
                 map.addLayer({
+                    id: "state-risk-fill",
+                    type: "fill",
+                    source: "county-risk",
+                    paint: {
+                        "fill-color": [
+                            "match",
+                            ["get", "state_risk_bucket"],
+                            "Very High", "#b42318",
+                            "Relatively High", "#f04438",
+                            "Relatively Moderate", "#f79009",
+                            "Relatively Low", "#12b76a",
+                            "Very Low", "#2e90fa",
+                            "#667085"
+                        ],
+                        "fill-opacity": 0.42
+                    }
+                });
+                map.addLayer({
                     id: "county-risk-fill",
                     type: "fill",
                     source: "county-risk",
                     paint: {
-                        "fill-color": ["case", ["has", "risk_color"], ["to-color", ["get", "risk_color"]], "#667085"],
-                        "fill-opacity": 0.36
+                        "fill-color": [
+                            "match",
+                            ["get", "risk_bucket"],
+                            "Very High", "#b42318",
+                            "Relatively High", "#f04438",
+                            "Relatively Moderate", "#f79009",
+                            "Relatively Low", "#12b76a",
+                            "Very Low", "#2e90fa",
+                            "#667085"
+                        ],
+                        "fill-opacity": 0.48
                     }
                 });
                 map.addLayer({
@@ -516,8 +625,8 @@
                     source: "county-risk",
                     paint: {
                         "line-color": "#ecf3f6",
-                        "line-opacity": 0.75,
-                        "line-width": 1.2
+                        "line-opacity": ["interpolate", ["linear"], ["zoom"], 3, 0.22, 6, 0.58, 9, 0.9],
+                        "line-width": ["interpolate", ["linear"], ["zoom"], 3, 0.4, 6, 1.1, 9, 1.7]
                     }
                 });
                 map.addSource("map-points", { type: "geojson", data: pointFeatureCollection(mapPoints) });
@@ -530,14 +639,21 @@
                     updateActivePlace(place);
                     new mapboxgl.Popup({ offset: 15 }).setLngLat([Number(place.longitude), Number(place.latitude)]).setHTML(popupHtmlForPoint(place)).addTo(map);
                 });
+                map.on("click", "state-risk-fill", (event) => {
+                    const props = event.features[0].properties;
+                    new mapboxgl.Popup({ offset: 10 }).setLngLat(event.lngLat).setHTML(popupHtmlForCounty(props, "state")).addTo(map);
+                });
                 map.on("click", "county-risk-fill", (event) => {
                     const props = event.features[0].properties;
-                    new mapboxgl.Popup({ offset: 10 }).setLngLat(event.lngLat).setHTML(popupHtmlForCounty(props)).addTo(map);
+                    new mapboxgl.Popup({ offset: 10 }).setLngLat(event.lngLat).setHTML(popupHtmlForCounty(props, "county")).addTo(map);
                 });
                 map.on("mouseenter", "map-points-circles", () => { map.getCanvas().style.cursor = "pointer"; });
                 map.on("mouseleave", "map-points-circles", () => { map.getCanvas().style.cursor = ""; });
+                map.on("mouseenter", "state-risk-fill", () => { map.getCanvas().style.cursor = "pointer"; });
+                map.on("mouseleave", "state-risk-fill", () => { map.getCanvas().style.cursor = ""; });
                 map.on("mouseenter", "county-risk-fill", () => { map.getCanvas().style.cursor = "pointer"; });
                 map.on("mouseleave", "county-risk-fill", () => { map.getCanvas().style.cursor = ""; });
+                map.on("zoom", applyOverlayVisibility);
                 applyPointFilters();
                 applyOverlayVisibility();
                 updateDistanceDisplay();

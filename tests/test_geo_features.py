@@ -8,6 +8,7 @@ from geo_features import (
     nearby_row_to_dict,
     osm_row_to_dict,
     risk_bucket,
+    risk_summary,
     state_abbr_from_fips,
 )
 
@@ -50,6 +51,25 @@ class GeoFeatureTests(unittest.TestCase):
         self.assertEqual(risk_bucket(24), "Relatively Low")
         self.assertEqual(risk_bucket(9), "Very Low")
         self.assertEqual(risk_bucket(None), "No Data")
+
+    def test_risk_summary_uses_rating_colors_when_available(self):
+        risk = risk_summary(83.5, "Very High")
+
+        self.assertEqual(risk["risk_index"], 83.5)
+        self.assertEqual(risk["risk_bucket"], "Very High")
+        self.assertEqual(risk["risk_color"], "#b42318")
+
+    def test_risk_summary_prefers_fema_rating_over_score_threshold(self):
+        risk = risk_summary(57.6, "Relatively Low")
+
+        self.assertEqual(risk["risk_bucket"], "Relatively Low")
+        self.assertEqual(risk["risk_color"], "#12b76a")
+
+    def test_risk_summary_falls_back_to_score_bucket(self):
+        risk = risk_summary(42, None)
+
+        self.assertEqual(risk["risk_bucket"], "Relatively Moderate")
+        self.assertEqual(risk["risk_color"], "#f79009")
 
     def test_county_risk_feature_builds_geojson_properties(self):
         county_row = (

@@ -73,6 +73,7 @@ Import FEMA risk data:
 
 ```bash
 docker compose exec web python import_fema_risk.py
+docker compose exec web python import_fema_county_risk.py
 ```
 
 Import U.S. cities:
@@ -129,4 +130,3 @@ erDiagram
 ## might have to do this first
 docker compose exec web python download_county_data.py
 docker compose exec web python import_census_counties.py 
-

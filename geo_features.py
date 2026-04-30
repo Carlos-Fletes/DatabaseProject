@@ -133,6 +133,16 @@ def risk_bucket(risk_index):
     return "Very Low"
 
 
+def risk_summary(risk_index=None, risk_rating=None):
+    score = to_float(risk_index)
+    bucket = risk_rating if risk_rating in RISK_COLORS else risk_bucket(score)
+    return {
+        "risk_index": score,
+        "risk_bucket": bucket,
+        "risk_color": RISK_COLORS.get(bucket, RISK_COLORS["No Data"]),
+    }
+
+
 def place_row_to_dict(row, source="places"):
     place = {
         "place_id": row[0],
@@ -191,8 +201,7 @@ def county_risk_feature(county_row, state_risk=None):
     geoid, name, statefp, geometry_json = county_row
     state_abbr = state_abbr_from_fips(statefp)
     state_risk = state_risk or {}
-    risk_index = to_float(state_risk.get("risk_index"))
-    bucket = state_risk.get("risk_rating") or risk_bucket(risk_index)
+    risk = risk_summary(state_risk.get("risk_index"), state_risk.get("risk_rating"))
 
     if isinstance(geometry_json, str):
         geometry = json.loads(geometry_json)
@@ -208,9 +217,7 @@ def county_risk_feature(county_row, state_risk=None):
             "statefp": str(statefp).zfill(2) if statefp is not None else None,
             "state_abbr": state_abbr,
             "state_name": state_risk.get("state_name"),
-            "risk_index": risk_index,
-            "risk_bucket": bucket,
-            "risk_color": RISK_COLORS.get(bucket, RISK_COLORS["No Data"]),
+            **risk,
         },
     }
 
